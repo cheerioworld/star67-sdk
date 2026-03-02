@@ -1,0 +1,18 @@
+{
+    "name": "Star67.Sdk.Editor",
+    "rootNamespace": "Star67.Sdk.Editor",
+    "references": [
+        "Star67.Sdk"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

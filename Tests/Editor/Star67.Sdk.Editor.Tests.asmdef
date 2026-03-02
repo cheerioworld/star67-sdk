@@ -1,0 +1,25 @@
+{
+    "name": "Star67.Sdk.Editor.Tests",
+    "rootNamespace": "Star67.Sdk.Editor.Tests",
+    "references": [
+        "Star67.Sdk",
+        "Star67.Sdk.Editor",
+        "UnityEngine.TestRunner",
+        "UnityEditor.TestRunner"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": true,
+    "precompiledReferences": [
+        "nunit.framework.dll"
+    ],
+    "autoReferenced": false,
+    "defineConstraints": [
+        "UNITY_INCLUDE_TESTS"
+    ],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
