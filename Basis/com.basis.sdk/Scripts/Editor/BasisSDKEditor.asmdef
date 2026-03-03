@@ -1,0 +1,24 @@
+{
+    "name": "BasisSDKEditor",
+    "rootNamespace": "",
+    "references": [
+        "Unity.ResourceManager",
+        "BasisSDK",
+        "BasisSerializer.OdinSerializer",
+        "Unity.Mathematics",
+        "BasisDebug",
+        "Unity.RenderPipelines.Core.Runtime",
+        "Basis Framework"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

@@ -2,7 +2,10 @@
     "name": "Star67.Sdk.Editor",
     "rootNamespace": "Star67.Sdk.Editor",
     "references": [
-        "Star67.Sdk"
+        "Star67.Sdk",
+        "BasisSDK",
+        "BasisSDKEditor",
+        "BasisDebug"
     ],
     "includePlatforms": [
         "Editor"

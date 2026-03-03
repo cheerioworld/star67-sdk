@@ -1,0 +1,131 @@
+using System;
+using System.Reflection;
+using UnityEditor;
+using UnityEngine.UIElements;
+
+public static class BasisSDKCommonInspector
+{
+    public static void CreateBuildOptionsDropdown(VisualElement parent)
+    {
+        BasisAssetBundleObject assetBundleObject =
+            AssetDatabase.LoadAssetAtPath<BasisAssetBundleObject>(
+                BasisAssetBundleObject.AssetBundleObject);
+
+        Foldout foldout = new Foldout
+        {
+            text = "Build AssetBundle Options",
+            value = false
+        };
+        parent.Add(foldout);
+
+        Toggle toggle = new Toggle("Use Custom Password")
+        {
+            value = assetBundleObject.UseCustomPassword
+        };
+
+        TextField passwordField = new TextField("Password")
+        {
+            value = assetBundleObject.UserSelectedPassword,
+            isPasswordField = true // masks input
+        };
+
+        // Initial state
+        passwordField.SetEnabled(toggle.value);
+        passwordField.style.display = toggle.value
+            ? DisplayStyle.Flex
+            : DisplayStyle.None;
+
+        toggle.RegisterValueChangedCallback(evt =>
+        {
+            assetBundleObject.UseCustomPassword = evt.newValue;
+
+            passwordField.SetEnabled(evt.newValue);
+            passwordField.style.display = evt.newValue
+                ? DisplayStyle.Flex
+                : DisplayStyle.None;
+
+            if (!evt.newValue)
+            {
+                assetBundleObject.UserSelectedPassword = "";
+                passwordField.value = "";
+            }
+
+            EditorUtility.SetDirty(assetBundleObject);
+        });
+
+        passwordField.RegisterValueChangedCallback(evt =>
+        {
+            assetBundleObject.UserSelectedPassword = evt.newValue;
+            EditorUtility.SetDirty(assetBundleObject);
+        });
+
+        foldout.Add(toggle);
+        foldout.Add(passwordField);
+
+        foreach (BuildAssetBundleOptions option in Enum.GetValues(typeof(BuildAssetBundleOptions)))
+        {
+            if (option == 0)
+            {
+                continue; // Skip "None"
+            }
+            // Check if the enum field has the Obsolete attribute
+            FieldInfo fieldInfo = typeof(BuildAssetBundleOptions).GetField(option.ToString());
+            if (fieldInfo != null && Attribute.IsDefined(fieldInfo, typeof(ObsoleteAttribute)))
+            {
+                continue; // Skip obsolete options from being shown
+
+            }
+            Toggle BABOTggle = new Toggle(option.ToString())
+            {
+                value = assetBundleObject.BuildAssetBundleOptions.HasFlag(option)
+            };
+
+            BABOTggle.RegisterValueChangedCallback(evt =>
+            {
+                if (evt.newValue)
+                {
+                    assetBundleObject.BuildAssetBundleOptions |= option;
+                }
+                else
+                {
+                    assetBundleObject.BuildAssetBundleOptions &= ~option;
+                }
+            });
+
+            foldout.Add(BABOTggle);
+        }
+        EditorUtility.SetDirty(assetBundleObject);
+        AssetDatabase.SaveAssets();
+    }
+    public static void CreateBuildTargetOptions(VisualElement parent)
+    {
+        BasisAssetBundleObject assetBundleObject = AssetDatabase.LoadAssetAtPath<BasisAssetBundleObject>(BasisAssetBundleObject.AssetBundleObject);
+        // Multi-select dropdown (Foldout with Toggles)
+        Foldout buildTargetFoldout = new Foldout { text = "Select Build Targets", value = false }; // Expanded by default
+        parent.Add(buildTargetFoldout);
+
+        foreach (var target in BasisSDKConstants.allowedTargets)
+        {
+            // Check if the target is already selected
+            bool isSelected = assetBundleObject.selectedTargets.Contains(target);
+
+            Toggle toggle = new Toggle(BasisSDKConstants.targetDisplayNames[target])
+            {
+                value = isSelected // Set the toggle based on whether the target is in the selected list
+            };
+
+            toggle.RegisterValueChangedCallback(evt =>
+            {
+                if (evt.newValue)
+                    assetBundleObject.selectedTargets.Add(target);
+                else
+                    assetBundleObject.selectedTargets.Remove(target);
+            });
+
+
+            buildTargetFoldout.Add(toggle);
+        }
+        EditorUtility.SetDirty(assetBundleObject);
+        AssetDatabase.SaveAssets();
+    }
+}

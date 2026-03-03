@@ -63,5 +63,7 @@
 *.framework/** filter=lfs diff=lfs merge=lfs -text
 
 Basis/com.basis.sdk/Fonts/*.asset filter=lfs diff=lfs merge=lfs -text
+"Basis/com.basis.sdk/Basis TMP/Examples & Extras/Resources/Fonts & Materials/Unity SDF.asset" filter=lfs diff=lfs merge=lfs -text
+"Basis/com.basis.sdk/Basis TMP/Resources/Fonts & Materials/LiberationSans SDF.asset" filter=lfs diff=lfs merge=lfs -text
 Basis/com.basis.sdk/Fonts/**/*.asset filter=lfs diff=lfs merge=lfs -text
-Basis/com.basis.sdk/Basis TMP/**/*.asset filter=lfs diff=lfs merge=lfs -text
+Basis/com.basis.sdk/Fonts/Inter.asset filter=lfs diff=lfs merge=lfs -text
