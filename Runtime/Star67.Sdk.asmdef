@@ -1,7 +1,11 @@
 {
     "name": "Star67.Sdk",
     "rootNamespace": "Star67.Sdk",
-    "references": [],
+    "references": [
+        "BasisSDK",
+        "UniTask",
+        "BasisBundleManagement"
+    ],
     "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
