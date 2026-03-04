@@ -1,11 +1,8 @@
 {
-    "name": "Star67.Sdk",
-    "rootNamespace": "Star67.Sdk",
+    "name": "Star67.Tracking",
+    "rootNamespace": "Star67.Tracking",
     "references": [
-        "Star67.Tracking",
-        "BasisSDK",
-        "UniTask",
-        "BasisBundleManagement"
+        "Unity.Mathematics"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],
@@ -15,5 +12,5 @@
     "autoReferenced": true,
     "defineConstraints": [],
     "versionDefines": [],
-    "noEngineReferences": false
+    "noEngineReferences": true
 }

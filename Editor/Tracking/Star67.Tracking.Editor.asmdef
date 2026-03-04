@@ -1,12 +1,10 @@
 {
-    "name": "Star67.Sdk.Editor",
-    "rootNamespace": "Star67.Sdk.Editor",
+    "name": "Star67.Tracking.Editor",
+    "rootNamespace": "Star67.Tracking.Editor",
     "references": [
-        "Star67.Sdk",
-        "Star67.Tracking.Editor",
-        "BasisSDK",
-        "BasisSDKEditor",
-        "BasisDebug"
+        "Star67.Tracking",
+        "Star67.Tracking.Unity",
+        "Star67.Sdk"
     ],
     "includePlatforms": [
         "Editor"

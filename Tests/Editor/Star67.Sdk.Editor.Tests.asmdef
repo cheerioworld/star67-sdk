@@ -2,8 +2,11 @@
     "name": "Star67.Sdk.Editor.Tests",
     "rootNamespace": "Star67.Sdk.Editor.Tests",
     "references": [
+        "Star67.Tracking",
         "Star67.Sdk",
         "Star67.Sdk.Editor",
+        "Star67.Tracking.Editor",
+        "Star67.Tracking.Unity",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"
     ],

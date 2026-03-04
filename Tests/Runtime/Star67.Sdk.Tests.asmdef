@@ -3,6 +3,8 @@
     "rootNamespace": "Star67.Sdk.Tests",
     "references": [
         "Star67.Sdk",
+        "Star67.Tracking",
+        "Star67.Tracking.Unity",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"
     ],

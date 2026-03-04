@@ -4,6 +4,7 @@ using Basis.Scripts.BasisSdk.Helpers.Editor;
 using Basis.Scripts.Editor;
 using System.Collections.Generic;
 using Star67.Sdk;
+using Star67.Tracking.Editor;
 using UnityEditor;
 using UnityEditor.UIElements;
 using UnityEngine;
@@ -45,6 +46,28 @@ public partial class Star67AvatarSDKInspector : BasisAvatarSDKInspector
          {
              BasisAvatarValidator.OnDestroy();
          }
+     }
+
+     public override VisualElement CreateInspectorGUI()
+     {
+         VisualElement root = base.CreateInspectorGUI();
+         if (root == null)
+         {
+             return null;
+         }
+
+         var previewButton = DocumentationButton(root, "Setup Tracking Preview");
+         previewButton.clicked += () =>
+         {
+             if (Avatar is not Star67Avatar star67Avatar)
+             {
+                 return;
+             }
+
+             TrackingPreviewWindow.OpenWindowForRoot(star67Avatar.gameObject);
+         };
+
+         return root;
      }
 //
 //     public override VisualElement CreateInspectorGUI()
