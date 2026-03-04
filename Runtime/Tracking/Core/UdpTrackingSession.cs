@@ -5,6 +5,9 @@ using System.Threading;
 
 namespace Star67.Tracking
 {
+    /// <summary>
+    /// Live UDP receiver for tracking packets sent by a remote app.
+    /// </summary>
     public sealed class UdpTrackingSession : ITrackingFrameSource
     {
         private readonly object _sync = new object();
@@ -23,6 +26,11 @@ namespace Star67.Tracking
         private ulong _latestSequence;
         private IPEndPoint _remoteEndPoint;
 
+        /// <summary>
+        /// Creates a UDP tracking session bound to the given data port and session token.
+        /// </summary>
+        /// <param name="port">UDP port to listen on.</param>
+        /// <param name="sessionToken">Optional fixed session token; when omitted a token is generated.</param>
         public UdpTrackingSession(int port = TrackingProtocol.DataPort, uint? sessionToken = null)
         {
             _port = port;
@@ -30,11 +38,25 @@ namespace Star67.Tracking
             State = TrackingConnectionState.Stopped;
         }
 
+        /// <summary>
+        /// Gets the session token accepted by this receiver.
+        /// </summary>
         public uint SessionToken { get; }
+
+        /// <inheritdoc />
         public TrackingConnectionState State { get; private set; }
+
+        /// <inheritdoc />
         public TrackingSessionInfo SessionInfo => _sessionInfo;
+
+        /// <summary>
+        /// Optional packet sink that receives raw accepted frame packets.
+        /// </summary>
         public ITrackingPacketSink PacketSink { get; set; }
 
+        /// <summary>
+        /// Starts listening for tracking traffic on the configured port.
+        /// </summary>
         public void Start()
         {
             if (_isRunning)
@@ -57,6 +79,9 @@ namespace Star67.Tracking
             _thread.Start();
         }
 
+        /// <summary>
+        /// Stops listening and releases underlying socket and worker thread resources.
+        /// </summary>
         public void Stop()
         {
             _isRunning = false;
@@ -79,6 +104,7 @@ namespace Star67.Tracking
             State = TrackingConnectionState.Stopped;
         }
 
+        /// <inheritdoc />
         public void Update()
         {
             if ((State == TrackingConnectionState.Connected || State == TrackingConnectionState.Listening)
@@ -91,6 +117,7 @@ namespace Star67.Tracking
             }
         }
 
+        /// <inheritdoc />
         public bool TryCopyLatestFrame(TrackingFrameBuffer destination)
         {
             if (destination == null)
@@ -110,6 +137,7 @@ namespace Star67.Tracking
             }
         }
 
+        /// <inheritdoc />
         public void Dispose()
         {
             Stop();

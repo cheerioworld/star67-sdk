@@ -3,16 +3,23 @@ using UnityEngine;
 namespace Star67.Tracking.Unity
 {
     [DisallowMultipleComponent]
+    /// <summary>
+    /// Applies canonical tracking frames to a <see cref="TrackingTargetRig"/> for IK and downstream retargeting.
+    /// </summary>
     public sealed class TrackingTargetRigDriver : MonoBehaviour, ITrackingFrameApplier
     {
         [SerializeField] private TrackingTargetRig rig;
 
+        /// <summary>
+        /// Gets or sets the output rig that receives camera, head, and hand targets.
+        /// </summary>
         public TrackingTargetRig Rig
         {
             get => rig;
             set => rig = value;
         }
 
+        /// <inheritdoc />
         public TrackingFeatureFlags RequiredFeatures => TrackingFeatureFlags.CameraWorldPose | TrackingFeatureFlags.HeadPose;
 
         private void Awake()
@@ -23,6 +30,7 @@ namespace Star67.Tracking.Unity
             }
         }
 
+        /// <inheritdoc />
         public void ApplyFrame(TrackingFrameBuffer frame)
         {
             if (rig == null || frame == null)
@@ -43,6 +51,7 @@ namespace Star67.Tracking.Unity
             ApplyHand(frame.CameraWorldPose, frame.RightHand, rig.RightWristTarget, rig.RightHandJointTargets, ref state.RightHandTracked);
         }
 
+        /// <inheritdoc />
         public void ResetState()
         {
             if (rig == null)

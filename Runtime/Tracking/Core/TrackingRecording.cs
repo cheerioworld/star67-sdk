@@ -480,6 +480,9 @@ namespace Star67.Tracking
         }
     }
 
+    /// <summary>
+    /// Playback source that reads recorded frame packets from a <c>.s67trk</c> file.
+    /// </summary>
     public sealed class TrackingRecordingPlayer : ITrackingFrameSource
     {
         private readonly object _sync = new object();
@@ -495,6 +498,10 @@ namespace Star67.Tracking
         private int _upperIndex = -1;
         private bool _hasFrame;
 
+        /// <summary>
+        /// Opens a recording file and prepares playback buffers.
+        /// </summary>
+        /// <param name="path">Path to a <c>.s67trk</c> recording.</param>
         public TrackingRecordingPlayer(string path)
         {
             _reader = new TrackingRecordingReader(path);
@@ -503,13 +510,35 @@ namespace Star67.Tracking
             Seek(0f);
         }
 
+        /// <inheritdoc />
         public TrackingConnectionState State { get; private set; }
+
+        /// <inheritdoc />
         public TrackingSessionInfo SessionInfo { get; }
+
+        /// <summary>
+        /// Gets whether playback is actively advancing.
+        /// </summary>
         public bool IsPlaying => _stopwatch.IsRunning;
+
+        /// <summary>
+        /// Gets or sets whether playback wraps to the beginning after reaching the end.
+        /// </summary>
         public bool Loop { get; set; }
+
+        /// <summary>
+        /// Gets total recording duration in seconds.
+        /// </summary>
         public float DurationSeconds => _reader.DurationUs / 1_000_000f;
+
+        /// <summary>
+        /// Gets the current playback time in seconds.
+        /// </summary>
         public float CurrentTimeSeconds { get; private set; }
 
+        /// <summary>
+        /// Starts playback from the current time.
+        /// </summary>
         public void Play()
         {
             if (_reader.FrameCount == 0 || _stopwatch.IsRunning)
@@ -520,6 +549,9 @@ namespace Star67.Tracking
             _stopwatch.Restart();
         }
 
+        /// <summary>
+        /// Pauses playback and preserves current playback time.
+        /// </summary>
         public void Pause()
         {
             if (!_stopwatch.IsRunning)
@@ -531,6 +563,10 @@ namespace Star67.Tracking
             _stopwatch.Stop();
         }
 
+        /// <summary>
+        /// Seeks to a normalized recording position.
+        /// </summary>
+        /// <param name="normalizedTime">Normalized time in [0, 1].</param>
         public void Seek(float normalizedTime)
         {
             Pause();
@@ -548,6 +584,7 @@ namespace Star67.Tracking
             DecodeAtTime(CurrentTimeSeconds);
         }
 
+        /// <inheritdoc />
         public void Update()
         {
             if (_reader.FrameCount == 0)
@@ -577,6 +614,7 @@ namespace Star67.Tracking
             DecodeAtTime(CurrentTimeSeconds);
         }
 
+        /// <inheritdoc />
         public bool TryCopyLatestFrame(TrackingFrameBuffer destination)
         {
             if (destination == null)
@@ -596,6 +634,7 @@ namespace Star67.Tracking
             }
         }
 
+        /// <inheritdoc />
         public void Dispose()
         {
             _reader.Dispose();

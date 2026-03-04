@@ -6,6 +6,9 @@ using UnityEngine;
 namespace Star67.Tracking.Unity
 {
     [DisallowMultipleComponent]
+    /// <summary>
+    /// Applies face blendshape weights from tracking frames onto one or more skinned meshes.
+    /// </summary>
     public sealed class Star67AvatarFaceBlendshapeDriver : MonoBehaviour, ITrackingFrameApplier
     {
         [SerializeField] private Transform root;
@@ -15,18 +18,25 @@ namespace Star67.Tracking.Unity
         private BasisFaceBlendshapeFrameDriver _driver;
         private FaceBlendshape[] _resetFrame;
 
+        /// <summary>
+        /// Gets or sets the root transform used when collecting face meshes automatically.
+        /// </summary>
         public Transform Root
         {
             get => root;
             set => root = value;
         }
 
+        /// <summary>
+        /// Gets or sets explicit skinned mesh renderers that should receive face blendshape updates.
+        /// </summary>
         public SkinnedMeshRenderer[] FaceRenderers
         {
             get => faceRenderers;
             set => faceRenderers = value;
         }
 
+        /// <inheritdoc />
         public TrackingFeatureFlags RequiredFeatures => TrackingFeatureFlags.Face;
 
         private void Awake()
@@ -39,6 +49,7 @@ namespace Star67.Tracking.Unity
             Bind();
         }
 
+        /// <inheritdoc />
         public void ApplyFrame(TrackingFrameBuffer frame)
         {
             if (_driver == null || frame == null || (frame.Features & TrackingFeatureFlags.Face) == 0)
@@ -49,6 +60,7 @@ namespace Star67.Tracking.Unity
             _driver.ApplyFrame(frame.FaceBlendshapes);
         }
 
+        /// <inheritdoc />
         public void ResetState()
         {
             if (_driver == null)
