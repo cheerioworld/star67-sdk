@@ -221,6 +221,17 @@ namespace Star67.Tracking
             LeftHand.CopyFrom(source.LeftHand);
             RightHand.CopyFrom(source.RightHand);
         }
+
+        public override string ToString()
+        {
+            float jawOpenWeight = FaceBlendshapes != null && FaceBlendshapes.Length > (int)FaceBlendshapeLocation.JawOpen
+                ? FaceBlendshapes[(int)FaceBlendshapeLocation.JawOpen].weight
+                : 0f;
+
+            return $"TrackingFrameBuffer(seq={Sequence}, session={SessionToken}, tsUs={CaptureTimestampUs}, " +
+                   $"features={Features}, cameraPos={CameraWorldPose.Position}, headPos={HeadPoseCameraSpace.Position}, " +
+                   $"leftTracked={LeftHand?.IsTracked ?? false}, rightTracked={RightHand?.IsTracked ?? false}, jawOpen={jawOpenWeight:0.###})";
+        }
     }
 
     public sealed class TrackingSessionInfo

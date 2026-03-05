@@ -22,13 +22,13 @@ namespace Star67
     {
         IAvatarDescriptor Descriptor { get; }
         IAvatarRig Rig { get; }
-        // IAvatarLifecycle Lifecycle { get; }
+        IList<SkinnedMeshRenderer> FaceTrackingRenderers { get; }
     }
 
     public interface IAvatarRig
     {
         Transform Root  { get; }
-        SkinnedMeshRenderer[] SkinnedMeshRenderers { get; }
+        // SkinnedMeshRenderer[] SkinnedMeshRenderers { get; }
         // IBlendShapeController BlendShapes { get; }
     }
 }
