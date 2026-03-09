@@ -3,7 +3,7 @@ using System;
 namespace Star67.Tracking
 {
     /// <summary>
-    /// Represents a source that publishes canonical tracking frames (live or playback) to consumers.
+    /// Represents a source that publishes canonical tracking frames for local consumers or transport senders.
     /// </summary>
     public interface ITrackingFrameSource : IDisposable
     {
@@ -14,6 +14,7 @@ namespace Star67.Tracking
 
         /// <summary>
         /// Gets metadata for the active source session.
+        /// UDP-streamable sources should keep this populated with the session details they want receivers to observe.
         /// </summary>
         TrackingSessionInfo SessionInfo { get; }
 
@@ -24,6 +25,8 @@ namespace Star67.Tracking
 
         /// <summary>
         /// Copies the latest available frame into <paramref name="destination"/>.
+        /// UDP-streamable sources should advance <see cref="TrackingFrameBuffer.Sequence"/> and/or
+        /// <see cref="TrackingFrameBuffer.CaptureTimestampUs"/> when publishing distinct frames.
         /// </summary>
         /// <param name="destination">Reusable destination buffer that receives the latest frame.</param>
         /// <returns><c>true</c> if a frame was available and copied; otherwise <c>false</c>.</returns>

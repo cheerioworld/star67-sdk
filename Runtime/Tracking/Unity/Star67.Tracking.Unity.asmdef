@@ -3,7 +3,8 @@
     "rootNamespace": "Star67.Tracking.Unity",
     "references": [
         "Star67.Tracking",
-        "Star67.Sdk"
+        "Star67.Sdk",
+        "Unity.Mathematics"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

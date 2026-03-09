@@ -5,6 +5,7 @@
         "Star67.Sdk",
         "Star67.Tracking",
         "Star67.Tracking.Unity",
+        "Unity.Mathematics",
         "UnityEngine.TestRunner",
         "UnityEditor.TestRunner"
     ],
