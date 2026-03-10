@@ -47,8 +47,18 @@ namespace Star67.Tracking.Unity
             set => rightWristTarget = value;
         }
 
-        public Transform[] LeftHandJointTargets => leftHandJointTargets;
-        public Transform[] RightHandJointTargets => rightHandJointTargets;
+        public Transform[] LeftHandJointTargets => EnsureJointTargets(ref leftHandJointTargets);
+        public Transform[] RightHandJointTargets => EnsureJointTargets(ref rightHandJointTargets);
         public TrackingTargetRigState State => state;
+
+        private static Transform[] EnsureJointTargets(ref Transform[] jointTargets)
+        {
+            if (jointTargets == null || jointTargets.Length != TrackingProtocol.HandJointCount)
+            {
+                jointTargets = new Transform[TrackingProtocol.HandJointCount];
+            }
+
+            return jointTargets;
+        }
     }
 }

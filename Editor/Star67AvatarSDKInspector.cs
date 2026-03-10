@@ -56,16 +56,16 @@ public partial class Star67AvatarSDKInspector : BasisAvatarSDKInspector
              return null;
          }
 
-         var previewButton = DocumentationButton(root, "Setup Tracking Preview");
-         previewButton.clicked += () =>
-         {
-             if (Avatar is not Star67Avatar star67Avatar)
-             {
-                 return;
-             }
-
-             TrackingPreviewWindow.OpenWindowForRoot(star67Avatar.gameObject);
-         };
+         // var previewButton = DocumentationButton(root, "Setup Tracking Preview");
+         // previewButton.clicked += () =>
+         // {
+         //     if (Avatar is not Star67Avatar star67Avatar)
+         //     {
+         //         return;
+         //     }
+         //
+         //     TrackingPreviewWindow.OpenWindowForRoot(star67Avatar.gameObject);
+         // };
 
          return root;
      }

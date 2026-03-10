@@ -18,25 +18,8 @@ namespace Star67.Tracking.Editor
             TrackingTargetRig rig = root.GetComponent<TrackingTargetRig>() ?? Undo.AddComponent<TrackingTargetRig>(root);
             TrackingTargetRigDriver rigDriver = root.GetComponent<TrackingTargetRigDriver>() ?? Undo.AddComponent<TrackingTargetRigDriver>(root);
             Star67AvatarFaceBlendshapeDriver faceDriver = root.GetComponent<Star67AvatarFaceBlendshapeDriver>() ?? Undo.AddComponent<Star67AvatarFaceBlendshapeDriver>(root);
-
-            Transform targetsRoot = EnsureChild(root.transform, "Tracking Preview Targets");
-            rig.CameraWorldTarget = EnsureChild(targetsRoot, "CameraWorld");
-            rig.HeadWorldTarget = EnsureChild(targetsRoot, "HeadWorld");
-            rig.LeftWristTarget = EnsureChild(targetsRoot, "LeftWrist");
-            rig.RightWristTarget = EnsureChild(targetsRoot, "RightWrist");
-
-            Transform leftHandRoot = EnsureChild(targetsRoot, "LeftHand");
-            Transform rightHandRoot = EnsureChild(targetsRoot, "RightHand");
-            for (int i = 0; i < TrackingProtocol.HandJointCount; i++)
-            {
-                rig.LeftHandJointTargets[i] = EnsureChild(leftHandRoot, ((HandJointId)i).ToString());
-                rig.RightHandJointTargets[i] = EnsureChild(rightHandRoot, ((HandJointId)i).ToString());
-            }
-
-            rigDriver.Rig = rig;
-            faceDriver.Root = root.transform;
-            controller.AutoFindAppliers = true;
-            controller.RefreshAppliers();
+            TrackingPreviewSetupUtilities.ConfigureTrackingTargetRig(root.transform, rig, EnsureChild);
+            TrackingPreviewSetupUtilities.ConfigurePreviewController(root.transform, rig, controller, rigDriver, faceDriver);
 
             EditorUtility.SetDirty(root);
             EditorUtility.SetDirty(rig);

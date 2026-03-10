@@ -8,7 +8,7 @@ namespace Star67
     {
         Genies = 0,
         Basis = 1,
-        VRM = 2
+        VRM = 3
     }
 
     public class AvatarDescriptor: IAvatarDescriptor {

@@ -1,15 +1,13 @@
 {
-    "name": "Star67.Tracking.Editor",
-    "rootNamespace": "Star67.Tracking.Editor",
+    "name": "Star67.Development",
+    "rootNamespace": "",
     "references": [
-        "Star67.Tracking",
-        "Star67.Tracking.Unity",
         "Star67.Sdk",
-        "Star67.Development"
+        "Star67.Tracking.Unity",
+        "RootMotion",
+        "BasisSDK"
     ],
-    "includePlatforms": [
-        "Editor"
-    ],
+    "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
     "overrideReferences": false,

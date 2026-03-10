@@ -92,9 +92,7 @@ namespace Star67.Avatar
           }
         }
 
-        var rig = new AvatarRig(
-          spawnedAvatar.transform,
-          spawnedAvatar.GetComponentsInChildren<SkinnedMeshRenderer>(true));
+        var rig = new global::Star67.AvatarRootRig(spawnedAvatar.transform);
 
         await Task.Yield();
         return new S67BasisAvatar(descriptor, rig);
@@ -779,17 +777,6 @@ namespace Star67.Avatar
       {
         Debug.Log("Disposing basis avatar");
         UnityEngine.Object.Destroy(Rig.Root.gameObject);
-      }
-    }
-    private sealed class AvatarRig : IAvatarRig
-    {
-      public Transform Root { get; }
-      // public SkinnedMeshRenderer[] SkinnedMeshRenderers { get; }
-
-      public AvatarRig(Transform root, SkinnedMeshRenderer[] skinnedMeshRenderers)
-      {
-        Root = root;
-        // SkinnedMeshRenderers = skinnedMeshRenderers ?? Array.Empty<SkinnedMeshRenderer>();
       }
     }
   }
