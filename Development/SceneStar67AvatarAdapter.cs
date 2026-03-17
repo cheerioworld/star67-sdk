@@ -21,7 +21,7 @@ namespace Star67.Sdk.Avatar
                 Metadata = new Dictionary<string, string>()
             };
 
-            Rig = new global::Star67.AvatarRootRig(avatar.transform);
+            Rig = new global::Star67.AvatarRootRig(avatar.transform, avatar.Animator);
         }
 
         public global::Star67.Sdk.Star67Avatar AvatarComponent => _avatar;

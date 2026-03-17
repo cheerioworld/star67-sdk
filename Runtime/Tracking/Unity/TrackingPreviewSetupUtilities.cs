@@ -1,10 +1,12 @@
 using System;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace Star67.Tracking.Unity
 {
     public static class TrackingPreviewSetupUtilities
     {
+        public const string UserTrackingServiceObjectName = "UserTrackingService";
         public const string TargetsRootName = "Tracking Preview Targets";
         public const string CameraWorldTargetName = "CameraWorld";
         public const string HeadWorldTargetName = "HeadWorld";
@@ -13,11 +15,54 @@ namespace Star67.Tracking.Unity
         public const string LeftHandRootName = "LeftHand";
         public const string RightHandRootName = "RightHand";
 
-        public static TrackingTargetRig EnsureTrackingTargetRig(GameObject root)
+        public static UserTrackingService EnsureSceneUserTrackingService(Scene scene)
+        {
+            UserTrackingService service = FindSceneUserTrackingService(scene);
+            if (service != null)
+            {
+                return EnsureUserTrackingService(service.gameObject);
+            }
+
+            var serviceObject = new GameObject(UserTrackingServiceObjectName);
+            if (scene.IsValid())
+            {
+                SceneManager.MoveGameObjectToScene(serviceObject, scene);
+            }
+
+            return EnsureUserTrackingService(serviceObject);
+        }
+
+        public static UserTrackingService FindSceneUserTrackingService(Scene scene)
+        {
+            UserTrackingService[] services = UnityEngine.Object.FindObjectsByType<UserTrackingService>(FindObjectsSortMode.None);
+            if (!scene.IsValid())
+            {
+                return services.Length > 0 ? services[0] : null;
+            }
+
+            for (int i = 0; i < services.Length; i++)
+            {
+                UserTrackingService service = services[i];
+                if (service != null && service.gameObject.scene == scene)
+                {
+                    return service;
+                }
+            }
+
+            return null;
+        }
+
+        public static UserTrackingService EnsureUserTrackingService(GameObject root)
         {
             if (root == null)
             {
                 throw new ArgumentNullException(nameof(root));
+            }
+
+            UserTrackingService service = root.GetComponent<UserTrackingService>();
+            if (service == null)
+            {
+                service = root.AddComponent<UserTrackingService>();
             }
 
             TrackingTargetRig rig = root.GetComponent<TrackingTargetRig>();
@@ -26,7 +71,62 @@ namespace Star67.Tracking.Unity
                 rig = root.AddComponent<TrackingTargetRig>();
             }
 
-            return ConfigureTrackingTargetRig(root.transform, rig, EnsureChildRuntime);
+            TrackingTargetRigDriver rigDriver = root.GetComponent<TrackingTargetRigDriver>();
+            if (rigDriver == null)
+            {
+                rigDriver = root.AddComponent<TrackingTargetRigDriver>();
+            }
+
+            TrackingPreviewController controller = root.GetComponent<TrackingPreviewController>();
+            if (controller == null)
+            {
+                controller = root.AddComponent<TrackingPreviewController>();
+            }
+
+            ConfigureTrackingTargetRig(root.transform, rig, EnsureChildRuntime);
+            ConfigureUserTrackingService(service, rig, rigDriver, controller);
+            return service;
+        }
+
+        public static void EnsurePreviewComponents(
+            GameObject owner,
+            out TrackingTargetRig rig,
+            out TrackingTargetRigDriver rigDriver,
+            out TrackingPreviewController controller,
+            out Star67AvatarFaceBlendshapeDriver faceDriver)
+        {
+            if (owner == null)
+            {
+                throw new ArgumentNullException(nameof(owner));
+            }
+
+            rig = owner.GetComponent<TrackingTargetRig>();
+            if (rig == null)
+            {
+                rig = owner.AddComponent<TrackingTargetRig>();
+            }
+
+            rigDriver = owner.GetComponent<TrackingTargetRigDriver>();
+            if (rigDriver == null)
+            {
+                rigDriver = owner.AddComponent<TrackingTargetRigDriver>();
+            }
+
+            controller = owner.GetComponent<TrackingPreviewController>();
+            if (controller == null)
+            {
+                controller = owner.AddComponent<TrackingPreviewController>();
+            }
+
+            faceDriver = owner.GetComponent<Star67AvatarFaceBlendshapeDriver>();
+            if (faceDriver == null)
+            {
+                faceDriver = owner.AddComponent<Star67AvatarFaceBlendshapeDriver>();
+            }
+
+            ConfigureTrackingTargetRig(owner.transform, rig, EnsureChildRuntime);
+            rigDriver.Rig = rig;
+            controller.AutoFindAppliers = false;
         }
 
         public static TrackingPreviewController EnsurePreviewController(GameObject root)
@@ -36,26 +136,61 @@ namespace Star67.Tracking.Unity
                 throw new ArgumentNullException(nameof(root));
             }
 
-            TrackingTargetRig rig = EnsureTrackingTargetRig(root);
-            TrackingPreviewController controller = root.GetComponent<TrackingPreviewController>();
-            if (controller == null)
+            EnsurePreviewComponents(root, out _, out _, out TrackingPreviewController controller, out _);
+            return controller;
+        }
+
+        public static Star67AvatarFaceBlendshapeDriver EnsureAvatarFaceDriver(GameObject owner, IAvatar avatar = null)
+        {
+            if (owner == null)
             {
-                controller = root.AddComponent<TrackingPreviewController>();
+                throw new ArgumentNullException(nameof(owner));
             }
 
-            TrackingTargetRigDriver rigDriver = root.GetComponent<TrackingTargetRigDriver>();
-            if (rigDriver == null)
-            {
-                rigDriver = root.AddComponent<TrackingTargetRigDriver>();
-            }
-
-            Star67AvatarFaceBlendshapeDriver faceDriver = root.GetComponent<Star67AvatarFaceBlendshapeDriver>();
+            Star67AvatarFaceBlendshapeDriver faceDriver = owner.GetComponent<Star67AvatarFaceBlendshapeDriver>();
             if (faceDriver == null)
             {
-                faceDriver = root.AddComponent<Star67AvatarFaceBlendshapeDriver>();
+                faceDriver = owner.AddComponent<Star67AvatarFaceBlendshapeDriver>();
             }
 
-            return ConfigurePreviewController(root.transform, rig, controller, rigDriver, faceDriver);
+            return ConfigureAvatarFaceDriver(faceDriver, avatar);
+        }
+
+        public static Star67AvatarFaceBlendshapeDriver ConfigureAvatarFaceDriver(
+            Star67AvatarFaceBlendshapeDriver faceDriver,
+            IAvatar avatar = null)
+        {
+            if (faceDriver == null)
+            {
+                throw new ArgumentNullException(nameof(faceDriver));
+            }
+
+            if (avatar == null)
+            {
+                faceDriver.ClearBinding();
+                return faceDriver;
+            }
+
+            faceDriver.BindAvatar(avatar);
+            return faceDriver;
+        }
+
+        public static Star67AvatarFaceBlendshapeDriver BindAvatar(UserTrackingService service, IAvatar avatar)
+        {
+            if (service == null)
+            {
+                throw new ArgumentNullException(nameof(service));
+            }
+
+            if (avatar?.Rig?.Root == null)
+            {
+                throw new ArgumentNullException(nameof(avatar));
+            }
+
+            EnsureUserTrackingService(service.gameObject);
+            Star67AvatarFaceBlendshapeDriver faceDriver = EnsureAvatarFaceDriver(avatar.Rig.Root.gameObject, avatar);
+            service.BindAvatar(avatar.Rig.Root, faceDriver);
+            return faceDriver;
         }
 
         public static TrackingTargetRig ConfigureTrackingTargetRig(
@@ -99,16 +234,15 @@ namespace Star67.Tracking.Unity
             return rig;
         }
 
-        public static TrackingPreviewController ConfigurePreviewController(
-            Transform root,
+        public static UserTrackingService ConfigureUserTrackingService(
+            UserTrackingService service,
             TrackingTargetRig rig,
-            TrackingPreviewController controller,
             TrackingTargetRigDriver rigDriver,
-            Star67AvatarFaceBlendshapeDriver faceDriver)
+            TrackingPreviewController controller)
         {
-            if (root == null)
+            if (service == null)
             {
-                throw new ArgumentNullException(nameof(root));
+                throw new ArgumentNullException(nameof(service));
             }
 
             if (rig == null)
@@ -116,26 +250,19 @@ namespace Star67.Tracking.Unity
                 throw new ArgumentNullException(nameof(rig));
             }
 
-            if (controller == null)
-            {
-                throw new ArgumentNullException(nameof(controller));
-            }
-
             if (rigDriver == null)
             {
                 throw new ArgumentNullException(nameof(rigDriver));
             }
 
-            if (faceDriver == null)
+            if (controller == null)
             {
-                throw new ArgumentNullException(nameof(faceDriver));
+                throw new ArgumentNullException(nameof(controller));
             }
 
             rigDriver.Rig = rig;
-            faceDriver.Root = root;
-            controller.AutoFindAppliers = true;
-            controller.RefreshAppliers();
-            return controller;
+            service.ConfigureOwnedComponents(rig, rigDriver, controller);
+            return service;
         }
 
         private static Transform EnsureChildRuntime(Transform parent, string childName)

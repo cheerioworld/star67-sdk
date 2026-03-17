@@ -33,6 +33,7 @@ namespace Star67.Tracking
         bool TryCopyLatestFrame(TrackingFrameBuffer destination);
     }
 
+    // public interface ITrack
     /// <summary>
     /// Receives raw frame packets that were accepted by a live source.
     /// </summary>

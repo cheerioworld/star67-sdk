@@ -3,15 +3,21 @@ using System.Collections.Generic;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using Basis.Scripts.BasisSdk;
 using UnityEngine;
 
 namespace Star67.Avatar
 {
-  public class Star67AvatarLoader : IAvatarLoader
+  public class Star67AvatarLoader : PostprocessedAvatarLoaderBase
   {
-    public bool CanLoad(IAvatarDescriptor descriptor) => descriptor.Type == AvatarType.Basis;
+    public Star67AvatarLoader(IEnumerable<IAvatarLoaderPostprocessor> postLoadProcessors = null)
+      : base(postLoadProcessors)
+    {
+    }
 
-    public async Task<IAvatar> LoadAvatarAsync(IAvatarDescriptor descriptor, Transform parent, CancellationToken cancellationToken)
+    public override bool CanLoad(IAvatarDescriptor descriptor) => descriptor.Type == AvatarType.Basis;
+
+    public override async Task<IAvatar> LoadAvatarAsync(IAvatarDescriptor descriptor, Transform parent, CancellationToken cancellationToken)
     {
       if (descriptor == null)
       {
@@ -92,10 +98,13 @@ namespace Star67.Avatar
           }
         }
 
-        var rig = new global::Star67.AvatarRootRig(spawnedAvatar.transform);
+        Animator animator = spawnedAvatar.GetComponentInChildren<Animator>(true);
+        var rig = new global::Star67.AvatarRootRig(spawnedAvatar.transform, animator);
+        var avatar = new S67BasisAvatar(descriptor, rig);
+        spawnedAvatar = null;
 
         await Task.Yield();
-        return new S67BasisAvatar(descriptor, rig);
+        return await PostprocessLoadedAvatarAsync(avatar, cancellationToken);
       }
       catch
       {
@@ -770,13 +779,38 @@ namespace Star67.Avatar
       {
         Descriptor = descriptor;
         Rig = rig;
-        FaceTrackingRenderers = new List<SkinnedMeshRenderer>();
+        FaceTrackingRenderers = CollectFaceTrackingRenderers(rig?.Root);
       }
 
       public void Dispose()
       {
         Debug.Log("Disposing basis avatar");
         UnityEngine.Object.Destroy(Rig.Root.gameObject);
+      }
+
+      private static IList<SkinnedMeshRenderer> CollectFaceTrackingRenderers(Transform root)
+      {
+        if (root == null)
+        {
+          return new List<SkinnedMeshRenderer>();
+        }
+
+        var renderers = new List<SkinnedMeshRenderer>();
+        BasisAvatar basisAvatar = root.GetComponentInChildren<BasisAvatar>(true);
+        if (basisAvatar != null)
+        {
+          if (basisAvatar.FaceVisemeMesh != null)
+          {
+            renderers.Add(basisAvatar.FaceVisemeMesh);
+          }
+
+          if (basisAvatar.FaceBlinkMesh != null && !renderers.Contains(basisAvatar.FaceBlinkMesh))
+          {
+            renderers.Add(basisAvatar.FaceBlinkMesh);
+          }
+        }
+
+        return renderers;
       }
     }
   }

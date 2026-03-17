@@ -6,7 +6,9 @@
         "Star67.Tracking.Editor",
         "BasisSDK",
         "BasisSDKEditor",
-        "BasisDebug"
+        "BasisDebug",
+        "Star67.Tracking",
+        "Star67.Tracking.Unity"
     ],
     "includePlatforms": [
         "Editor"

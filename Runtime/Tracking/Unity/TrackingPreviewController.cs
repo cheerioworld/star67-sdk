@@ -53,6 +53,7 @@ namespace Star67.Tracking.Unity
             _source = source;
         }
 
+        [ContextMenu("Refresh Appliers")]
         public void RefreshAppliers()
         {
             _appliers.Clear();

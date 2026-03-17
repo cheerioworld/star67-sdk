@@ -4,7 +4,6 @@
     "references": [
         "Star67.Tracking",
         "BasisSDK",
-        "UniTask",
         "BasisBundleManagement"
     ],
     "includePlatforms": [],

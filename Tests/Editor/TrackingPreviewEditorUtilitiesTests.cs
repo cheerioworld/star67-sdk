@@ -8,67 +8,67 @@ namespace Star67.Sdk.Editor.Tests
     public class TrackingPreviewEditorUtilitiesTests
     {
         private const int ExpectedHandJointCount = 21;
-        private GameObject _avatarRoot;
+        private GameObject _previewRoot;
 
         [TearDown]
         public void TearDown()
         {
-            if (_avatarRoot != null)
+            if (_previewRoot != null)
             {
-                Object.DestroyImmediate(_avatarRoot);
+                Object.DestroyImmediate(_previewRoot);
+            }
+
+            EditorPreviewCompositionRoot existingRoot = Object.FindAnyObjectByType<EditorPreviewCompositionRoot>();
+            if (existingRoot != null)
+            {
+                Object.DestroyImmediate(existingRoot.gameObject);
             }
         }
 
         [Test]
-        public void EnsureStar67PreviewSetup_AddsPreviewComponentsAndTargets()
+        public void EnsurePreviewController_AddsPreviewComponentsAndTargetsToOwner()
         {
-            _avatarRoot = new GameObject("AvatarRoot");
-            TrackingPreviewEditorUtilities.EnsureStar67PreviewSetup(_avatarRoot);
-            TrackingPreviewController controller = _avatarRoot.GetComponent<TrackingPreviewController>();
+            _previewRoot = new GameObject("PreviewRoot");
+            TrackingPreviewController controller = TrackingPreviewSetupUtilities.EnsurePreviewController(_previewRoot);
 
             Assert.That(controller, Is.Not.Null);
-            Assert.That(_avatarRoot.GetComponent<TrackingTargetRig>(), Is.Not.Null);
-            Assert.That(_avatarRoot.GetComponent<TrackingTargetRigDriver>(), Is.Not.Null);
-            Assert.That(_avatarRoot.GetComponent<Star67AvatarFaceBlendshapeDriver>(), Is.Not.Null);
+            Assert.That(_previewRoot.GetComponent<TrackingTargetRig>(), Is.Not.Null);
+            Assert.That(_previewRoot.GetComponent<TrackingTargetRigDriver>(), Is.Not.Null);
+            Assert.That(_previewRoot.GetComponent<Star67AvatarFaceBlendshapeDriver>(), Is.Not.Null);
 
-            TrackingTargetRig rig = _avatarRoot.GetComponent<TrackingTargetRig>();
+            TrackingTargetRig rig = _previewRoot.GetComponent<TrackingTargetRig>();
             Assert.That(rig.CameraWorldTarget, Is.Not.Null);
             Assert.That(rig.HeadWorldTarget, Is.Not.Null);
             Assert.That(rig.LeftHandJointTargets.Length, Is.EqualTo(ExpectedHandJointCount));
             Assert.That(rig.RightHandJointTargets.Length, Is.EqualTo(ExpectedHandJointCount));
             Assert.That(rig.LeftHandJointTargets[0], Is.Not.Null);
+            Assert.That(controller.AutoFindAppliers, Is.False);
         }
 
         [Test]
-        public void EnsureStar67PreviewSetup_IsIdempotent()
+        public void EnsurePreviewController_IsIdempotent()
         {
-            _avatarRoot = new GameObject("AvatarRoot");
+            _previewRoot = new GameObject("PreviewRoot");
 
-            TrackingPreviewEditorUtilities.EnsureStar67PreviewSetup(_avatarRoot);
-            TrackingPreviewEditorUtilities.EnsureStar67PreviewSetup(_avatarRoot);
+            TrackingPreviewSetupUtilities.EnsurePreviewController(_previewRoot);
+            TrackingPreviewSetupUtilities.EnsurePreviewController(_previewRoot);
 
-            Assert.That(_avatarRoot.GetComponents<TrackingPreviewController>().Length, Is.EqualTo(1));
-            Assert.That(_avatarRoot.GetComponents<TrackingTargetRig>().Length, Is.EqualTo(1));
-            Assert.That(_avatarRoot.GetComponents<TrackingTargetRigDriver>().Length, Is.EqualTo(1));
-            Assert.That(_avatarRoot.GetComponents<Star67AvatarFaceBlendshapeDriver>().Length, Is.EqualTo(1));
-            Assert.That(_avatarRoot.transform.Find(TrackingPreviewSetupUtilities.TargetsRootName), Is.Not.Null);
+            Assert.That(_previewRoot.GetComponents<TrackingPreviewController>().Length, Is.EqualTo(1));
+            Assert.That(_previewRoot.GetComponents<TrackingTargetRig>().Length, Is.EqualTo(1));
+            Assert.That(_previewRoot.GetComponents<TrackingTargetRigDriver>().Length, Is.EqualTo(1));
+            Assert.That(_previewRoot.GetComponents<Star67AvatarFaceBlendshapeDriver>().Length, Is.EqualTo(1));
+            Assert.That(_previewRoot.transform.Find(TrackingPreviewSetupUtilities.TargetsRootName), Is.Not.Null);
         }
 
         [Test]
-        public void EnsurePreviewController_CreatesRuntimeDriversAndTargets()
+        public void EnsureStar67PreviewSetup_DoesNotCreatePreviewRootOutsidePlayMode()
         {
-            _avatarRoot = new GameObject("AvatarRoot");
+            _previewRoot = new GameObject("AvatarRoot");
 
-            TrackingPreviewController controller = TrackingPreviewSetupUtilities.EnsurePreviewController(_avatarRoot);
+            EditorPreviewCompositionRoot compositionRoot = TrackingPreviewEditorUtilities.EnsureStar67PreviewSetup(_previewRoot);
 
-            Assert.That(controller, Is.Not.Null);
-            Assert.That(_avatarRoot.GetComponent<TrackingTargetRig>(), Is.Not.Null);
-            Assert.That(_avatarRoot.GetComponent<TrackingTargetRigDriver>(), Is.Not.Null);
-            Assert.That(_avatarRoot.GetComponent<Star67AvatarFaceBlendshapeDriver>(), Is.Not.Null);
-            Assert.That(_avatarRoot.GetComponent<TrackingTargetRigDriver>().Rig, Is.SameAs(_avatarRoot.GetComponent<TrackingTargetRig>()));
-            Assert.That(_avatarRoot.GetComponent<Star67AvatarFaceBlendshapeDriver>().Root, Is.SameAs(_avatarRoot.transform));
-            Assert.That(_avatarRoot.transform.Find(TrackingPreviewSetupUtilities.TargetsRootName), Is.Not.Null);
-            Assert.That(controller.AutoFindAppliers, Is.True);
+            Assert.That(compositionRoot, Is.Null);
+            Assert.That(Object.FindAnyObjectByType<EditorPreviewCompositionRoot>(), Is.Null);
         }
     }
 }

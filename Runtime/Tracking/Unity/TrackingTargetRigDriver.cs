@@ -2,13 +2,15 @@ using UnityEngine;
 
 namespace Star67.Tracking.Unity
 {
-    [DisallowMultipleComponent]
     /// <summary>
     /// Applies canonical tracking frames to a <see cref="TrackingTargetRig"/> for IK and downstream retargeting.
     /// </summary>
+    [DisallowMultipleComponent]
     public sealed class TrackingTargetRigDriver : MonoBehaviour, ITrackingFrameApplier
     {
         [SerializeField] private TrackingTargetRig rig;
+
+        private float _avatarHeight = 0f;
 
         /// <summary>
         /// Gets or sets the output rig that receives camera, head, and hand targets.
@@ -30,6 +32,11 @@ namespace Star67.Tracking.Unity
             }
         }
 
+        public void SetAvatarHeight(float heightMeters)
+        {
+            _avatarHeight = heightMeters;
+        }
+
         /// <inheritdoc />
         public void ApplyFrame(TrackingFrameBuffer frame)
         {
@@ -40,11 +47,11 @@ namespace Star67.Tracking.Unity
 
             TrackingTargetRigState state = rig.State;
 
-            ApplyPose(rig.CameraWorldTarget, frame.CameraWorldPose);
+            ApplyPose(rig.CameraWorldTarget, frame.CameraWorldPose, _avatarHeight);
             state.CameraTracked = (frame.Features & TrackingFeatureFlags.CameraWorldPose) != 0;
 
             TrackingPose headWorldPose = TrackingMath.Combine(frame.CameraWorldPose, frame.HeadPoseCameraSpace);
-            ApplyPose(rig.HeadWorldTarget, headWorldPose);
+            ApplyPose(rig.HeadWorldTarget, headWorldPose, _avatarHeight);
             state.HeadTracked = (frame.Features & TrackingFeatureFlags.HeadPose) != 0;
 
             ApplyHand(frame.CameraWorldPose, frame.LeftHand, rig.LeftWristTarget, rig.LeftHandJointTargets, ref state.LeftHandTracked);
@@ -65,14 +72,14 @@ namespace Star67.Tracking.Unity
             rig.State.RightHandTracked = false;
         }
 
-        private static void ApplyPose(Transform target, TrackingPose pose)
+        private static void ApplyPose(Transform target, TrackingPose pose, float heightOffset)
         {
             if (target == null)
             {
                 return;
             }
 
-            target.position = ToVector3(pose.GetPositionValue());
+            target.position = ToVector3(pose.GetPositionValue()) + Vector3.up * heightOffset;
             target.rotation = ToQuaternion(pose.GetRotationValue());
         }
 

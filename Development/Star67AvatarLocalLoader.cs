@@ -5,9 +5,14 @@ using UnityEngine;
 
 namespace Star67.Sdk.Avatar
 {
-    public class Star67AvatarLocalLoader: IAvatarLoader
+    public class Star67AvatarLocalLoader: PostprocessedAvatarLoaderBase
     {
-        public bool CanLoad(IAvatarDescriptor d)
+        public Star67AvatarLocalLoader(System.Collections.Generic.IEnumerable<IAvatarLoaderPostprocessor> postLoadProcessors = null)
+            : base(postLoadProcessors)
+        {
+        }
+
+        public override bool CanLoad(IAvatarDescriptor d)
         {
             if (d.Type == AvatarType.Basis)
             {
@@ -17,7 +22,7 @@ namespace Star67.Sdk.Avatar
             return false;
         }
 
-        public Task<IAvatar> LoadAvatarAsync(IAvatarDescriptor d, Transform parent, CancellationToken ct)
+        public override async Task<IAvatar> LoadAvatarAsync(IAvatarDescriptor d, Transform parent, CancellationToken ct)
         {
             SceneStar67AvatarAdapter avatar = SceneStar67AvatarAdapter.TryCreateFirstInScene(out int avatarCount);
             if (avatar == null)
@@ -30,7 +35,7 @@ namespace Star67.Sdk.Avatar
                 Debug.LogWarning($"Multiple Star67Avatars found in the scene. Using '{avatar.AvatarName}'.");
             }
 
-            return Task.FromResult<IAvatar>(avatar);
+            return await PostprocessLoadedAvatarAsync(avatar, ct);
         }
     }
 }

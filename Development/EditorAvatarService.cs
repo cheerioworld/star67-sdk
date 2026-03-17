@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Star67.Avatar;
+using Star67.Avatar.Calibration;
 using Star67.Tracking.Unity;
 using UnityEngine;
 
@@ -13,7 +13,6 @@ namespace Star67.Sdk.Avatar
   public class EditorAvatarService: MonoBehaviour
   {
     private IEnumerable<IAvatarLoader> _loaders;
-    private IAvatarLoaderPostprocessor[] _postLoadProcessors;
     private readonly Transform _avatarParent;
     private readonly SemaphoreSlim _loadLock = new SemaphoreSlim(1, 1);
 
@@ -21,33 +20,32 @@ namespace Star67.Sdk.Avatar
 
     private void Awake()
     {
-      var loaders = new IAvatarLoader[] { new Star67AvatarLocalLoader() };
+      UserTrackingService userTrackingService = FindAnyObjectByType<UserTrackingService>();
+      var calibrationService = new AvatarCalibrationService(
+        new IAvatarCalibrationStep[]
+        {
+          new HumanoidReferencePoseCalibrationStep(),
+          new EyeHeightCalibrationStep()
+        },
+        new IAvatarCalibrationPoseGuard[]
+        {
+          new FinalIkAvatarCalibrationPoseGuard()
+        });
       var postLoadProcessors = new IAvatarLoaderPostprocessor[]
       {
-        new TrackingTargetRigAvatarLoaderPostprocessor(),
-        new VrikAvatarLoaderPostprocessor()
+        new UserTrackingAvatarBindingPostprocessor(userTrackingService),
+        new AvatarCalibrationPostprocessor(calibrationService),
+        new VrikAvatarLoaderPostprocessor(userTrackingService)
       };
-      
-      
+
+      var loaders = new IAvatarLoader[] { new Star67AvatarLocalLoader(postLoadProcessors) };
       _loaders = loaders ?? throw new ArgumentNullException(nameof(loaders));
-      _postLoadProcessors = postLoadProcessors == null
-        ? Array.Empty<IAvatarLoaderPostprocessor>()
-        : postLoadProcessors
-          .Where(processor => processor != null)
-          .OrderBy(processor => processor.Order)
-          .ToArray();
     }
 
-    public EditorAvatarService(IEnumerable<IAvatarLoader> loaders, IEnumerable<IAvatarLoaderPostprocessor> postLoadProcessors, Transform avatarParent)
+    public EditorAvatarService(IEnumerable<IAvatarLoader> loaders, Transform avatarParent)
     {
       _avatarParent = avatarParent;
       _loaders = loaders ?? throw new ArgumentNullException(nameof(loaders));
-      _postLoadProcessors = postLoadProcessors == null
-        ? Array.Empty<IAvatarLoaderPostprocessor>()
-        : postLoadProcessors
-          .Where(processor => processor != null)
-          .OrderBy(processor => processor.Order)
-          .ToArray();
     }
 
     public async Task<IAvatar> LoadAvatar(IAvatarDescriptor descriptor, CancellationToken cancellationToken = default)
@@ -71,10 +69,6 @@ namespace Star67.Sdk.Avatar
           {
             throw new InvalidOperationException($"Loader '{loader.GetType().Name}' returned null avatar.");
           }
-
-          cancellationToken.ThrowIfCancellationRequested();
-          await RunPostLoadProcessorsAsync(loadedAvatar, cancellationToken);
-          cancellationToken.ThrowIfCancellationRequested();
 
           IAvatar previousAvatar = activeAvatar;
           activeAvatar = loadedAvatar;
@@ -125,21 +119,6 @@ namespace Star67.Sdk.Avatar
       catch (Exception exception)
       {
         Debug.LogWarning($"AvatarService: Failed to dispose avatar cleanly. {exception.Message}");
-      }
-    }
-
-    private async Task RunPostLoadProcessorsAsync(IAvatar avatar, CancellationToken cancellationToken)
-    {
-      for (int i = 0; i < _postLoadProcessors.Length; i++)
-      {
-        IAvatarLoaderPostprocessor processor = _postLoadProcessors[i];
-        if (!processor.CanProcess(avatar))
-        {
-          continue;
-        }
-
-        cancellationToken.ThrowIfCancellationRequested();
-        await processor.ProcessAsync(avatar, cancellationToken);
       }
     }
   }

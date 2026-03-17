@@ -7,25 +7,14 @@ namespace Star67.Tracking.Unity
 {
     [DisallowMultipleComponent]
     /// <summary>
-    /// Applies face blendshape weights from tracking frames onto one or more skinned meshes.
+    /// Applies face blendshape weights from tracking frames onto explicitly bound skinned meshes.
     /// </summary>
     public sealed class Star67AvatarFaceBlendshapeDriver : MonoBehaviour, ITrackingFrameApplier
     {
-        [SerializeField] private Transform root;
-        [SerializeField] private SkinnedMeshRenderer[] faceRenderers;
-        [SerializeField] private bool includeChildMeshesWhenEmpty = true;
+        [SerializeField] private SkinnedMeshRenderer[] faceRenderers = Array.Empty<SkinnedMeshRenderer>();
 
-        private BasisFaceBlendshapeFrameDriver _driver;
+        private FaceTrackingRendererSink _driver;
         private FaceBlendshape[] _resetFrame;
-
-        /// <summary>
-        /// Gets or sets the root transform used when collecting face meshes automatically.
-        /// </summary>
-        public Transform Root
-        {
-            get => root;
-            set => root = value;
-        }
 
         /// <summary>
         /// Gets or sets explicit skinned mesh renderers that should receive face blendshape updates.
@@ -33,7 +22,7 @@ namespace Star67.Tracking.Unity
         public SkinnedMeshRenderer[] FaceRenderers
         {
             get => faceRenderers;
-            set => faceRenderers = value;
+            set => SetFaceRenderers(value);
         }
 
         /// <inheritdoc />
@@ -41,23 +30,55 @@ namespace Star67.Tracking.Unity
 
         private void Awake()
         {
-            Bind();
+            RebindDriver();
         }
 
         private void OnEnable()
         {
-            Bind();
+            RebindDriver();
+        }
+
+        /// <summary>
+        /// Rebinds the driver to the face renderers exposed by the given avatar.
+        /// </summary>
+        public void BindAvatar(IAvatar avatar)
+        {
+            ResetState();
+            SetFaceRenderers(avatar?.FaceTrackingRenderers);
+        }
+
+        /// <summary>
+        /// Clears the current renderer binding and resets any driven blendshapes back to zero.
+        /// </summary>
+        public void ClearBinding()
+        {
+            ResetState();
+            SetFaceRenderers(Array.Empty<SkinnedMeshRenderer>());
+        }
+
+        /// <summary>
+        /// Replaces the active renderer binding.
+        /// </summary>
+        public void SetFaceRenderers(IList<SkinnedMeshRenderer> renderers)
+        {
+            faceRenderers = SanitizeRenderers(renderers);
+            RebindDriver();
         }
 
         /// <inheritdoc />
         public void ApplyFrame(TrackingFrameBuffer frame)
         {
+            if (_driver == null)
+            {
+                RebindDriver();
+            }
+
             if (_driver == null || frame == null || (frame.Features & TrackingFeatureFlags.Face) == 0)
             {
                 return;
             }
 
-            _driver.ApplyFrame(frame.FaceBlendshapes);
+            _driver.Apply(frame.FaceBlendshapes);
         }
 
         /// <inheritdoc />
@@ -65,28 +86,37 @@ namespace Star67.Tracking.Unity
         {
             if (_driver == null)
             {
+                RebindDriver();
+            }
+
+            if (_driver == null)
+            {
                 return;
             }
 
             EnsureResetFrame();
-            _driver.ApplyFrame(_resetFrame);
+            _driver.Apply(_resetFrame);
         }
 
-        private void Bind()
+        private void RebindDriver()
         {
-            if (root == null)
+            if (faceRenderers == null)
             {
-                root = transform;
+                faceRenderers = Array.Empty<SkinnedMeshRenderer>();
             }
 
-            SkinnedMeshRenderer[] renderers = CollectFaceMeshes(root, faceRenderers, includeChildMeshesWhenEmpty);
-            if (renderers.Length == 0)
+            if (_driver == null)
             {
-                _driver = null;
+                if (faceRenderers.Length == 0)
+                {
+                    return;
+                }
+
+                _driver = new FaceTrackingRendererSink(faceRenderers);
                 return;
             }
 
-            _driver = new BasisFaceBlendshapeFrameDriver(renderers);
+            _driver.SetTargetRenderers(faceRenderers);
         }
 
         private void EnsureResetFrame()
@@ -108,28 +138,24 @@ namespace Star67.Tracking.Unity
             }
         }
 
-        private static SkinnedMeshRenderer[] CollectFaceMeshes(Transform searchRoot, SkinnedMeshRenderer[] explicitRenderers, bool includeChildrenWhenEmpty)
+        private static SkinnedMeshRenderer[] SanitizeRenderers(IList<SkinnedMeshRenderer> renderers)
         {
-            var renderers = new List<SkinnedMeshRenderer>();
-
-            if (explicitRenderers != null)
+            if (renderers == null || renderers.Count == 0)
             {
-                for (int i = 0; i < explicitRenderers.Length; i++)
+                return Array.Empty<SkinnedMeshRenderer>();
+            }
+
+            var sanitized = new List<SkinnedMeshRenderer>(renderers.Count);
+            for (int i = 0; i < renderers.Count; i++)
+            {
+                SkinnedMeshRenderer renderer = renderers[i];
+                if (renderer != null && !sanitized.Contains(renderer))
                 {
-                    SkinnedMeshRenderer renderer = explicitRenderers[i];
-                    if (renderer != null && !renderers.Contains(renderer))
-                    {
-                        renderers.Add(renderer);
-                    }
+                    sanitized.Add(renderer);
                 }
             }
 
-            if (renderers.Count == 0 && includeChildrenWhenEmpty && searchRoot != null)
-            {
-                renderers.AddRange(searchRoot.GetComponentsInChildren<SkinnedMeshRenderer>(true));
-            }
-
-            return renderers.ToArray();
+            return sanitized.Count == 0 ? Array.Empty<SkinnedMeshRenderer>() : sanitized.ToArray();
         }
     }
 }
