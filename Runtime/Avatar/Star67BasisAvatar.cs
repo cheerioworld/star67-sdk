@@ -24,6 +24,7 @@ namespace Star67.Avatar
         public void Dispose()
         {
             Debug.Log("Disposing basis avatar");
+            Components.RemoveAll(false);
             UnityEngine.Object.Destroy(Rig.Root.gameObject);
         }
 
