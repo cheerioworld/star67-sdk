@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.Scripting;
 
 namespace Star67.Avatar.Calibration
 {
@@ -10,6 +11,9 @@ namespace Star67.Avatar.Calibration
         {
             return avatar?.Rig?.Root != null;
         }
+        
+        [Preserve]
+        public HumanoidReferencePoseCalibrationStep() {}
 
         public void Calibrate(AvatarCalibrationContext context)
         {

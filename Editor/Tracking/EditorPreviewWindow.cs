@@ -1,6 +1,5 @@
 using System;
 using System.IO;
-using System.Linq;
 using System.Net;
 using Star67.Tracking.Unity;
 using UnityEditor;
@@ -8,47 +7,35 @@ using UnityEngine;
 
 namespace Star67.Tracking.Editor
 {
-    public sealed class TrackingPreviewWindow : EditorWindow
+    public sealed class EditorPreviewWindow : EditorWindow
     {
         private const double ActiveRepaintIntervalSeconds = 0.2d;
         private const string RecordingPathKey = "Star67.Tracking.Editor.RecordingPath";
+        private const string SenderIpAddressKey = "Star67.Tracking.Editor.SenderIpAddress";
 
-        [SerializeField] private EditorPreviewCompositionRoot compositionRoot;
-        [SerializeField] private TrackingPreviewController previewController;
+        [SerializeField] private EditorPreviewManager manager;
         [SerializeField] private string recordingPath;
+        [SerializeField] private string senderIpAddress;
         [SerializeField] private bool loopPlayback;
 
         private string playModeStatus;
         private bool editorTickRegistered;
         private double nextRepaintAt;
-        private double nextNetworkSnapshotAt;
-        private UdpTrackingSession liveSession;
-        private TrackingDiscoveryService discoveryService;
+        private UdpTrackingReceiverClient liveClient;
         private TrackingRecordingWriter recordingWriter;
         private TrackingRecordingPlayer playbackPlayer;
         private string[] cachedLocalIPv4Addresses = Array.Empty<string>();
-        private DiscoveryRegistryEntry[] cachedDiscoveryAnnouncements = Array.Empty<DiscoveryRegistryEntry>();
 
         [MenuItem("Window/Star67/Tracking Preview")]
         public static void OpenWindow()
         {
-            GetWindow<TrackingPreviewWindow>("Tracking Preview").Show();
+            GetWindow<EditorPreviewWindow>("Tracking Preview").Show();
         }
 
-        public static void OpenWindow(TrackingPreviewController controller)
+        public static void OpenWindow(EditorPreviewManager root)
         {
-            TrackingPreviewWindow window = GetWindow<TrackingPreviewWindow>("Tracking Preview");
-            window.compositionRoot = controller != null ? controller.GetComponent<EditorPreviewCompositionRoot>() : null;
-            window.previewController = controller;
-            window.Show();
-            window.Focus();
-        }
-
-        public static void OpenWindow(EditorPreviewCompositionRoot root)
-        {
-            TrackingPreviewWindow window = GetWindow<TrackingPreviewWindow>("Tracking Preview");
-            window.compositionRoot = root;
-            window.previewController = root != null ? root.PreviewController : null;
+            EditorPreviewWindow window = GetWindow<EditorPreviewWindow>("Tracking Preview");
+            window.manager = root;
             window.playModeStatus = root != null ? root.StatusMessage : null;
             window.Show();
             window.Focus();
@@ -61,7 +48,7 @@ namespace Star67.Tracking.Editor
                 throw new ArgumentNullException(nameof(root));
             }
 
-            TrackingPreviewWindow window = GetWindow<TrackingPreviewWindow>("Tracking Preview");
+            EditorPreviewWindow window = GetWindow<EditorPreviewWindow>("Tracking Preview");
             window.Show();
             window.Focus();
 
@@ -73,9 +60,9 @@ namespace Star67.Tracking.Editor
 
         private void OnEnable()
         {
-            cachedLocalIPv4Addresses = GetLocalIPv4Addresses();
-            cachedDiscoveryAnnouncements = Array.Empty<DiscoveryRegistryEntry>();
+            cachedLocalIPv4Addresses = TrackingNetworkUtilities.GetLocalIPv4Addresses();
             recordingPath = EditorPrefs.GetString(RecordingPathKey, GetDefaultRecordingPath());
+            senderIpAddress = EditorPrefs.GetString(SenderIpAddressKey, string.Empty);
             EditorApplication.playModeStateChanged += OnPlayModeStateChanged;
             ResetPlayModeResolutionState();
             RefreshEditorTickRegistration();
@@ -110,48 +97,42 @@ namespace Star67.Tracking.Editor
         {
             EditorGUILayout.LabelField("Preview Target", EditorStyles.boldLabel);
             EditorGUI.BeginChangeCheck();
-            EditorPreviewCompositionRoot newRoot = (EditorPreviewCompositionRoot)EditorGUILayout.ObjectField(
+            EditorPreviewManager newRoot = (EditorPreviewManager)EditorGUILayout.ObjectField(
                 "Composition Root",
-                compositionRoot,
-                typeof(EditorPreviewCompositionRoot),
+                manager,
+                typeof(EditorPreviewManager),
                 true);
             if (EditorGUI.EndChangeCheck())
             {
-                compositionRoot = newRoot;
-                previewController = compositionRoot != null ? compositionRoot.PreviewController : null;
-                playModeStatus = compositionRoot != null ? compositionRoot.StatusMessage : playModeStatus;
-                ApplyActiveSourceToPreviewController();
-            }
-
-            using (new EditorGUI.DisabledScope(true))
-            {
-                EditorGUILayout.ObjectField("Controller", previewController, typeof(TrackingPreviewController), true);
+                manager = newRoot;
+                playModeStatus = manager != null ? manager.StatusMessage : playModeStatus;
+                ApplyActiveSourceToManager();
             }
 
             if (EditorApplication.isPlaying)
             {
                 if (!string.IsNullOrEmpty(playModeStatus))
                 {
-                    EditorGUILayout.HelpBox(playModeStatus, compositionRoot == null ? MessageType.Warning : MessageType.Info);
+                    EditorGUILayout.HelpBox(playModeStatus, manager == null ? MessageType.Warning : MessageType.Info);
                 }
 
-                if (compositionRoot == null)
+                if (manager == null)
                 {
                     EditorGUILayout.HelpBox(
-                        "A play-mode EditorPreviewCompositionRoot will be created automatically and bind to the first Star67Avatar found in loaded scenes.",
+                        "A play-mode EditorPreviewManager will be created automatically and bind to the first Star67Avatar found in loaded scenes.",
                         MessageType.Info);
                 }
                 else
                 {
                     EditorGUILayout.HelpBox(
-                        "The resolved composition root owns the shared preview rig, preview controller, and reusable face blendshape driver.",
+                        "The resolved preview manager owns the shared preview rig and tracking pipeline for the active authored avatar.",
                         MessageType.Info);
                 }
             }
             else
             {
                 EditorGUILayout.HelpBox(
-                    "Enter Play Mode to apply live or recorded tracking through the play-mode preview composition root.",
+                    "Enter Play Mode to apply live or recorded tracking through the play-mode preview manager.",
                     MessageType.Info);
             }
         }
@@ -161,12 +142,29 @@ namespace Star67.Tracking.Editor
             EditorGUILayout.LabelField("Live Preview", EditorStyles.boldLabel);
             using (new EditorGUILayout.HorizontalScope())
             {
-                EditorGUILayout.LabelField("IPv4", string.Join(", ", cachedLocalIPv4Addresses), GUILayout.MaxWidth(position.width - 120f));
+                EditorGUILayout.LabelField("Receiver IPv4", string.Join(", ", cachedLocalIPv4Addresses), GUILayout.MaxWidth(position.width - 120f));
             }
 
-            using (new EditorGUI.DisabledScope(IsPreviewUnavailableInPlayMode()))
+            using (new EditorGUI.DisabledScope(liveClient != null))
             {
-                if (liveSession == null)
+                EditorGUI.BeginChangeCheck();
+                string newSenderIpAddress = EditorGUILayout.TextField("Sender IP", senderIpAddress ?? string.Empty);
+                if (EditorGUI.EndChangeCheck())
+                {
+                    senderIpAddress = (newSenderIpAddress ?? string.Empty).Trim();
+                    EditorPrefs.SetString(SenderIpAddressKey, senderIpAddress);
+                }
+            }
+
+            bool hasValidSenderIp = TryGetConfiguredSenderAddress(out _, out string senderIpValidationMessage);
+            if (!hasValidSenderIp)
+            {
+                EditorGUILayout.HelpBox(senderIpValidationMessage, MessageType.Error);
+            }
+
+            using (new EditorGUI.DisabledScope(IsPreviewUnavailableInPlayMode() || !hasValidSenderIp))
+            {
+                if (liveClient == null)
                 {
                     if (GUILayout.Button("Start Listening"))
                     {
@@ -185,25 +183,16 @@ namespace Star67.Tracking.Editor
                 }
             }
 
-            EditorGUILayout.LabelField("State", liveSession?.State.ToString() ?? TrackingConnectionState.Stopped.ToString());
+            EditorGUILayout.LabelField("State", liveClient?.State.ToString() ?? TrackingConnectionState.Stopped.ToString());
             EditorGUILayout.LabelField("Data Port", TrackingProtocol.DataPort.ToString());
-            EditorGUILayout.LabelField("Discovery Port", TrackingProtocol.DiscoveryPort.ToString());
-            if (liveSession != null)
+            EditorGUILayout.LabelField("Control Port", TrackingProtocol.ControlPort.ToString());
+            if (liveClient != null)
             {
-                EditorGUILayout.LabelField("Session Token", liveSession.SessionToken.ToString());
-                EditorGUILayout.LabelField("Device", string.IsNullOrEmpty(liveSession.SessionInfo.DeviceName) ? "(waiting)" : liveSession.SessionInfo.DeviceName);
-                EditorGUILayout.LabelField("App Version", string.IsNullOrEmpty(liveSession.SessionInfo.AppVersion) ? "(waiting)" : liveSession.SessionInfo.AppVersion);
-                EditorGUILayout.LabelField("Features", liveSession.SessionInfo.AvailableFeatures.ToString());
-            }
-
-            if (discoveryService != null)
-            {
-                EditorGUILayout.LabelField("Discovered Apps", cachedDiscoveryAnnouncements.Length.ToString());
-                for (int i = 0; i < cachedDiscoveryAnnouncements.Length; i++)
-                {
-                    DiscoveryRegistryEntry entry = cachedDiscoveryAnnouncements[i];
-                    EditorGUILayout.LabelField($"- {entry.Announcement.DeviceName}", $"{entry.RemoteEndPoint.Address}:{entry.Announcement.DataPort}");
-                }
+                EditorGUILayout.LabelField("Session Token", liveClient.SessionToken.ToString());
+                EditorGUILayout.LabelField("Sender Endpoint", liveClient.RemoteEndPoint != null ? liveClient.RemoteEndPoint.ToString() : "(waiting)");
+                EditorGUILayout.LabelField("Device", string.IsNullOrEmpty(liveClient.SessionInfo.DeviceName) ? "(waiting)" : liveClient.SessionInfo.DeviceName);
+                EditorGUILayout.LabelField("App Version", string.IsNullOrEmpty(liveClient.SessionInfo.AppVersion) ? "(waiting)" : liveClient.SessionInfo.AppVersion);
+                EditorGUILayout.LabelField("Features", liveClient.SessionInfo.AvailableFeatures.ToString());
             }
         }
 
@@ -224,7 +213,7 @@ namespace Star67.Tracking.Editor
                 }
             }
 
-            using (new EditorGUI.DisabledScope(liveSession == null))
+            using (new EditorGUI.DisabledScope(liveClient == null))
             {
                 if (recordingWriter == null)
                 {
@@ -312,14 +301,6 @@ namespace Star67.Tracking.Editor
             }
 
             double now = EditorApplication.timeSinceStartup;
-            if (now >= nextNetworkSnapshotAt)
-            {
-                nextNetworkSnapshotAt = now + 1d;
-                cachedDiscoveryAnnouncements = discoveryService != null
-                    ? discoveryService.Registry.Snapshot(TimeSpan.FromSeconds(5))
-                    : Array.Empty<DiscoveryRegistryEntry>();
-            }
-
             if (now < nextRepaintAt)
             {
                 return;
@@ -331,37 +312,41 @@ namespace Star67.Tracking.Editor
 
         private void StartLive()
         {
-            StopPlayback();
-            StopLive();
-            if (!EnsurePreviewControllerForPlayMode())
+            if (!TryGetConfiguredSenderAddress(out IPAddress configuredSenderAddress, out _))
             {
                 return;
             }
 
-            liveSession = new UdpTrackingSession();
-            liveSession.Start();
-
-            discoveryService = new TrackingDiscoveryService(new DiscoveryAnnouncement
+            StopPlayback();
+            StopLive();
+            if (!EnsurePreviewManagerForPlayMode())
             {
-                Role = DiscoveryRole.Editor,
-                SessionToken = liveSession.SessionToken,
-                DeviceName = Environment.MachineName,
-                DataPort = TrackingProtocol.DataPort,
-                PackageVersion = "com.cheerioworld.star67.sdk",
-                AvailableFeatures = TrackingFeatureFlags.Face | TrackingFeatureFlags.HeadPose | TrackingFeatureFlags.CameraWorldPose | TrackingFeatureFlags.LeftHand | TrackingFeatureFlags.RightHand
-            });
-            discoveryService.Start();
-            cachedDiscoveryAnnouncements = Array.Empty<DiscoveryRegistryEntry>();
-            ApplyActiveSourceToPreviewController();
+                return;
+            }
+
+            try
+            {
+                liveClient = new UdpTrackingReceiverClient(configuredSenderAddress);
+                liveClient.Start();
+            }
+            catch (Exception exception)
+            {
+                liveClient?.Dispose();
+                liveClient = null;
+                EditorUtility.DisplayDialog("Failed to Start Live Preview", exception.Message, "OK");
+                return;
+            }
+
+            ApplyActiveSourceToManager();
             RefreshEditorTickRegistration();
             Repaint();
         }
 
         private void StopLive()
         {
-            if (previewController != null && liveSession != null && ReferenceEquals(previewController.Source, liveSession))
+            if (manager != null && liveClient != null)
             {
-                previewController.SetSource(null);
+                manager.SetSource(null);
             }
 
             if (recordingWriter != null)
@@ -369,18 +354,15 @@ namespace Star67.Tracking.Editor
                 StopRecording();
             }
 
-            discoveryService?.Dispose();
-            discoveryService = null;
-            cachedDiscoveryAnnouncements = Array.Empty<DiscoveryRegistryEntry>();
-            liveSession?.Dispose();
-            liveSession = null;
+            liveClient?.Dispose();
+            liveClient = null;
             RefreshEditorTickRegistration();
             Repaint();
         }
 
         private void StartRecording()
         {
-            if (liveSession == null)
+            if (liveClient == null)
             {
                 return;
             }
@@ -394,18 +376,18 @@ namespace Star67.Tracking.Editor
             recordingWriter = new TrackingRecordingWriter();
             recordingWriter.Start(recordingPath, new TrackingRecordingHeader
             {
-                SessionToken = liveSession.SessionToken,
-                SessionInfo = liveSession.SessionInfo.Clone()
+                SessionToken = liveClient.SessionToken,
+                SessionInfo = liveClient.SessionInfo.Clone()
             });
-            liveSession.PacketSink = recordingWriter;
+            liveClient.PacketSink = recordingWriter;
             Repaint();
         }
 
         private void StopRecording()
         {
-            if (liveSession != null)
+            if (liveClient != null)
             {
-                liveSession.PacketSink = null;
+                liveClient.PacketSink = null;
             }
 
             recordingWriter?.Dispose();
@@ -417,7 +399,7 @@ namespace Star67.Tracking.Editor
         {
             StopLive();
             StopPlayback();
-            if (!EnsurePreviewControllerForPlayMode())
+            if (!EnsurePreviewManagerForPlayMode())
             {
                 return;
             }
@@ -427,9 +409,9 @@ namespace Star67.Tracking.Editor
                 Loop = loopPlayback
             };
 
-            if (previewController != null)
+            if (manager != null)
             {
-                previewController.SetSource(playbackPlayer);
+                manager.SetSource(playbackPlayer);
             }
 
             RefreshEditorTickRegistration();
@@ -438,9 +420,9 @@ namespace Star67.Tracking.Editor
 
         private void StopPlayback()
         {
-            if (previewController != null && playbackPlayer != null && ReferenceEquals(previewController.Source, playbackPlayer))
+            if (manager != null && playbackPlayer != null)
             {
-                previewController.SetSource(null);
+                manager.SetSource(null);
             }
 
             playbackPlayer?.Dispose();
@@ -451,7 +433,7 @@ namespace Star67.Tracking.Editor
 
         private void TogglePlayback()
         {
-            if (!EnsurePreviewControllerForPlayMode())
+            if (!EnsurePreviewManagerForPlayMode())
             {
                 return;
             }
@@ -477,25 +459,29 @@ namespace Star67.Tracking.Editor
             }
         }
 
-        private static string[] GetLocalIPv4Addresses()
-        {
-            try
-            {
-                return Dns.GetHostAddresses(Dns.GetHostName())
-                    .Where(address => address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
-                    .Select(address => address.ToString())
-                    .Distinct()
-                    .ToArray();
-            }
-            catch
-            {
-                return Array.Empty<string>();
-            }
-        }
-
         private static string GetDefaultRecordingPath()
         {
             return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory), "star67-preview.s67trk");
+        }
+
+        private bool TryGetConfiguredSenderAddress(out IPAddress configuredSenderAddress, out string validationMessage)
+        {
+            configuredSenderAddress = null;
+            if (string.IsNullOrWhiteSpace(senderIpAddress))
+            {
+                validationMessage = "Enter the sender's IPv4 address to start live preview.";
+                return false;
+            }
+
+            if (!IPAddress.TryParse(senderIpAddress, out configuredSenderAddress) || configuredSenderAddress.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork)
+            {
+                configuredSenderAddress = null;
+                validationMessage = "Sender IP must be a valid IPv4 address.";
+                return false;
+            }
+
+            validationMessage = null;
+            return true;
         }
 
         private void OnPlayModeStateChanged(PlayModeStateChange change)
@@ -518,7 +504,7 @@ namespace Star67.Tracking.Editor
             }
         }
 
-        private bool EnsurePreviewControllerForPlayMode()
+        private bool EnsurePreviewManagerForPlayMode()
         {
             if (!EditorApplication.isPlaying)
             {
@@ -530,9 +516,8 @@ namespace Star67.Tracking.Editor
                 return false;
             }
 
-            previewController = compositionRoot != null ? compositionRoot.PreviewController : null;
-            ApplyActiveSourceToPreviewController();
-            return previewController != null;
+            ApplyActiveSourceToManager();
+            return manager != null;
         }
 
         private bool EnsureCompositionRootForPlayMode()
@@ -542,12 +527,11 @@ namespace Star67.Tracking.Editor
                 return false;
             }
 
-            if (compositionRoot != null)
+            if (manager != null)
             {
-                previewController = compositionRoot.PreviewController;
-                if (!string.IsNullOrEmpty(compositionRoot.StatusMessage))
+                if (!string.IsNullOrEmpty(manager.StatusMessage))
                 {
-                    playModeStatus = compositionRoot.StatusMessage;
+                    playModeStatus = manager.StatusMessage;
                 }
 
                 return true;
@@ -560,34 +544,31 @@ namespace Star67.Tracking.Editor
         {
             if (!EditorApplication.isPlaying)
             {
-                compositionRoot = null;
-                previewController = null;
+                manager = null;
                 playModeStatus = null;
                 return false;
             }
 
-            EditorPreviewCompositionRoot resolvedRoot = EditorPreviewCompositionRoot.FindActive();
+            EditorPreviewManager resolvedRoot = EditorPreviewManager.FindActive();
             string resolvedStatusMessage = resolvedRoot != null ? resolvedRoot.StatusMessage : null;
             if (resolvedRoot == null && createIfNeeded)
             {
-                EditorPreviewCompositionRoot.TryResolveOrCreateForPlayMode(out resolvedRoot, out resolvedStatusMessage);
+                EditorPreviewManager.TryResolveOrCreateForPlayMode(out resolvedRoot, out resolvedStatusMessage);
             }
 
-            compositionRoot = resolvedRoot;
-            previewController = compositionRoot != null ? compositionRoot.PreviewController : null;
+            manager = resolvedRoot;
             playModeStatus = !string.IsNullOrEmpty(resolvedStatusMessage)
                 ? resolvedStatusMessage
-                : compositionRoot != null
-                    ? compositionRoot.StatusMessage
+                : manager != null
+                    ? manager.StatusMessage
                     : "No Star67Avatar found in loaded scenes.";
-            ApplyActiveSourceToPreviewController();
-            return compositionRoot != null;
+            ApplyActiveSourceToManager();
+            return manager != null;
         }
 
         private void ResetPlayModeResolutionState()
         {
-            compositionRoot = null;
-            previewController = null;
+            manager = null;
             playModeStatus = EditorApplication.isPlaying
                 ? "Resolving play-mode preview composition root..."
                 : null;
@@ -595,7 +576,7 @@ namespace Star67.Tracking.Editor
 
         private bool IsPreviewUnavailableInPlayMode()
         {
-            return EditorApplication.isPlaying && compositionRoot == null;
+            return EditorApplication.isPlaying && manager == null;
         }
 
         private void QueueCompositionRootResolve()
@@ -617,43 +598,31 @@ namespace Star67.Tracking.Editor
             Repaint();
         }
 
-        private void ApplyActiveSourceToPreviewController()
+        private void ApplyActiveSourceToManager()
         {
-            previewController = compositionRoot != null ? compositionRoot.PreviewController : previewController;
-            if (previewController == null || !EditorApplication.isPlaying)
+            if (manager == null || !EditorApplication.isPlaying)
             {
                 return;
             }
 
             if (playbackPlayer != null)
             {
-                if (!ReferenceEquals(previewController.Source, playbackPlayer))
-                {
-                    previewController.SetSource(playbackPlayer);
-                }
-
+                manager.SetSource(playbackPlayer);
                 return;
             }
 
-            if (liveSession != null)
+            if (liveClient != null)
             {
-                if (!ReferenceEquals(previewController.Source, liveSession))
-                {
-                    previewController.SetSource(liveSession);
-                }
-
+                manager.SetSource(liveClient);
                 return;
             }
 
-            if (previewController.Source != null)
-            {
-                previewController.SetSource(null);
-            }
+            manager.SetSource(null);
         }
 
         private bool NeedsPeriodicRefresh()
         {
-            return discoveryService != null || playbackPlayer != null || liveSession != null;
+            return playbackPlayer != null || liveClient != null;
         }
 
         private void RefreshEditorTickRegistration()
@@ -671,7 +640,6 @@ namespace Star67.Tracking.Editor
             if (shouldRegister)
             {
                 nextRepaintAt = 0d;
-                nextNetworkSnapshotAt = 0d;
                 EditorApplication.update += EditorTick;
             }
             else

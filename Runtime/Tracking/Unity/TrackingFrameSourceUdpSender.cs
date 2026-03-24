@@ -34,6 +34,7 @@ namespace Star67.Tracking.Unity
         public TrackingConnectionState State => _sender?.State ?? TrackingConnectionState.Stopped;
         public int LocalPort => _sender?.LocalDataPort ?? 0;
         public string RemoteEndpoint => _sender?.RemoteEndPoint?.ToString() ?? string.Empty;
+        public string[] LocalIPv4Addresses => TrackingNetworkUtilities.GetLocalIPv4Addresses();
         public ITrackingFrameSource ActiveSource => ResolveSource(logWarnings: false);
 
         private void OnEnable()

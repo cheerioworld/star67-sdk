@@ -35,7 +35,7 @@ namespace Star67.Sdk.Avatar
       {
         new UserTrackingAvatarBindingPostprocessor(userTrackingService),
         new AvatarCalibrationPostprocessor(calibrationService),
-        new VrikAvatarLoaderPostprocessor(userTrackingService)
+        // new VrikAvatarLoaderPostprocessor()
       };
 
       var loaders = new IAvatarLoader[] { new Star67AvatarLocalLoader(postLoadProcessors) };

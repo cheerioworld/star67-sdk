@@ -7,6 +7,7 @@ namespace Star67.Avatar.Calibration
     public interface IAvatarCalibrationService
     {
         event Action<AvatarCalibrationState> AvatarCalibrated;
-        Task<AvatarCalibrationRuntime> CalibrateAsync(IAvatar avatar, CancellationToken cancellationToken = default);
+        AvatarCalibrationState Calibrate(IAvatar avatar);
+        Task<AvatarCalibrationState> CalibrateAsync(IAvatar avatar, CancellationToken cancellationToken = default);
     }
 }

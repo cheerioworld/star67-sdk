@@ -1,6 +1,7 @@
 using System;
 using RootMotion;
 using Star67.Avatar.Calibration;
+using UnityEngine.Scripting;
 
 namespace Star67.Avatar.Calibration
 {
@@ -11,6 +12,9 @@ namespace Star67.Avatar.Calibration
             return avatar?.Rig?.Root != null
                 && avatar.Rig.Root.GetComponentInChildren<SolverManager>(true) != null;
         }
+        
+        [Preserve]
+        public FinalIkAvatarCalibrationPoseGuard() {}
 
         public IDisposable Enter(IAvatar avatar)
         {

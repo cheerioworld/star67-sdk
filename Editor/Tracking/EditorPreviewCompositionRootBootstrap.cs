@@ -35,7 +35,7 @@ namespace Star67.Tracking.Editor
                 return;
             }
 
-            EditorPreviewCompositionRoot.TryResolveOrCreateForPlayMode(out _, out _);
+            EditorPreviewManager.TryResolveOrCreateForPlayMode(out _, out _);
         }
     }
 }

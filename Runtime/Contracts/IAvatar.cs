@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Star67.Avatar;
 using UnityEngine;
 
 namespace Star67
@@ -23,6 +24,13 @@ namespace Star67
         IAvatarDescriptor Descriptor { get; }
         IAvatarRig Rig { get; }
         IList<SkinnedMeshRenderer> FaceTrackingRenderers { get; }
+        AvatarIKTargets IKTargets { get; }
+        AvatarComponentManager Components { get; }
+    }
+
+    public interface IAvatarContext
+    {
+        float EyeHeightMeters { get; }
     }
 
     public interface IAvatarRig

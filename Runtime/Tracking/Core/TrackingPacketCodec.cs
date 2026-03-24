@@ -44,6 +44,32 @@ namespace Star67.Tracking
             return TryReadHeaderOnly(source, TrackingPacketType.ConnectAck, out sessionToken);
         }
 
+        public static bool TryWriteRegisterReceiver(uint sessionToken, int receiverDataPort, Span<byte> destination, out int written)
+        {
+            written = 0;
+            int offset = 0;
+            if (!TryWriteHeader(TrackingPacketType.RegisterReceiver, sessionToken, destination, ref offset)
+                || !TryWriteInt32(receiverDataPort, destination, ref offset))
+            {
+                return false;
+            }
+
+            written = offset;
+            return true;
+        }
+
+        public static bool TryReadRegisterReceiver(ReadOnlySpan<byte> source, out uint sessionToken, out int receiverDataPort)
+        {
+            receiverDataPort = 0;
+            if (!TryReadHeaderOnly(source, TrackingPacketType.RegisterReceiver, out sessionToken, out int offset)
+                || !TryReadInt32(source, ref offset, out receiverDataPort))
+            {
+                return false;
+            }
+
+            return offset == source.Length;
+        }
+
         public static bool TryWriteHelloPacket(uint sessionToken, TrackingSessionInfo sessionInfo, Span<byte> destination, out int written)
         {
             written = 0;

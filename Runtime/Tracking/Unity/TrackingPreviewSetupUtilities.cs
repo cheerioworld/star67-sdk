@@ -92,8 +92,7 @@ namespace Star67.Tracking.Unity
             GameObject owner,
             out TrackingTargetRig rig,
             out TrackingTargetRigDriver rigDriver,
-            out TrackingPreviewController controller,
-            out Star67AvatarFaceBlendshapeDriver faceDriver)
+            out TrackingPreviewController controller)
         {
             if (owner == null)
             {
@@ -118,12 +117,6 @@ namespace Star67.Tracking.Unity
                 controller = owner.AddComponent<TrackingPreviewController>();
             }
 
-            faceDriver = owner.GetComponent<Star67AvatarFaceBlendshapeDriver>();
-            if (faceDriver == null)
-            {
-                faceDriver = owner.AddComponent<Star67AvatarFaceBlendshapeDriver>();
-            }
-
             ConfigureTrackingTargetRig(owner.transform, rig, EnsureChildRuntime);
             rigDriver.Rig = rig;
             controller.AutoFindAppliers = false;
@@ -136,7 +129,7 @@ namespace Star67.Tracking.Unity
                 throw new ArgumentNullException(nameof(root));
             }
 
-            EnsurePreviewComponents(root, out _, out _, out TrackingPreviewController controller, out _);
+            EnsurePreviewComponents(root, out _, out _, out TrackingPreviewController controller);
             return controller;
         }
 

@@ -18,7 +18,7 @@ namespace Star67.Sdk.Editor.Tests
                 Object.DestroyImmediate(_previewRoot);
             }
 
-            EditorPreviewCompositionRoot existingRoot = Object.FindAnyObjectByType<EditorPreviewCompositionRoot>();
+            EditorPreviewManager existingRoot = Object.FindAnyObjectByType<EditorPreviewManager>();
             if (existingRoot != null)
             {
                 Object.DestroyImmediate(existingRoot.gameObject);
@@ -65,10 +65,10 @@ namespace Star67.Sdk.Editor.Tests
         {
             _previewRoot = new GameObject("AvatarRoot");
 
-            EditorPreviewCompositionRoot compositionRoot = TrackingPreviewEditorUtilities.EnsureStar67PreviewSetup(_previewRoot);
+            EditorPreviewManager manager = TrackingPreviewEditorUtilities.EnsureStar67PreviewSetup(_previewRoot);
 
-            Assert.That(compositionRoot, Is.Null);
-            Assert.That(Object.FindAnyObjectByType<EditorPreviewCompositionRoot>(), Is.Null);
+            Assert.That(manager, Is.Null);
+            Assert.That(Object.FindAnyObjectByType<EditorPreviewManager>(), Is.Null);
         }
     }
 }

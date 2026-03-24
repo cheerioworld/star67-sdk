@@ -1,6 +1,7 @@
 using Basis.Scripts.BasisSdk;
 using Basis.Scripts.BasisSdk.Helpers;
 using UnityEngine;
+using UnityEngine.Scripting;
 
 namespace Star67.Avatar.Calibration
 {
@@ -12,6 +13,9 @@ namespace Star67.Avatar.Calibration
         {
             return avatar?.Rig?.Root != null;
         }
+        
+        [Preserve]
+        public EyeHeightCalibrationStep() {}
 
         public void Calibrate(AvatarCalibrationContext context)
         {

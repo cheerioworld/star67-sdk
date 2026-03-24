@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
+using UnityEngine.Scripting;
 
 namespace Star67.Avatar.Calibration
 {
@@ -13,6 +14,7 @@ namespace Star67.Avatar.Calibration
         private readonly IAvatarCalibrationStep[] calibrationSteps;
         private readonly IAvatarCalibrationPoseGuard[] poseGuards;
 
+        [Preserve]
         public AvatarCalibrationService()
             : this(
                 new IAvatarCalibrationStep[]
@@ -40,12 +42,13 @@ namespace Star67.Avatar.Calibration
                     .ToArray();
         }
         
-        public Task<AvatarCalibrationRuntime> CalibrateAsync(IAvatar avatar, CancellationToken cancellationToken = default)
+        public AvatarCalibrationState Calibrate(IAvatar avatar)
         {
+            var state = new AvatarCalibrationState();
             if (avatar?.Rig?.Root == null)
             {
-                AvatarCalibrated?.Invoke(null);
-                return Task.FromResult<AvatarCalibrationRuntime>(null);
+                AvatarCalibrated?.Invoke(state);
+                return state;
             }
 
             Transform root = avatar.Rig.Root;
@@ -53,12 +56,9 @@ namespace Star67.Avatar.Calibration
             if (animator == null || animator.avatar == null || !animator.isHuman)
             {
                 Debug.LogWarning($"AvatarCalibrationService: Avatar '{root.name}' does not expose a humanoid Animator. Skipping calibration.");
-                var runtime = root.GetComponent<AvatarCalibrationRuntime>();
-                AvatarCalibrated?.Invoke(runtime.State);
-                return Task.FromResult(runtime);
+                AvatarCalibrated?.Invoke(state);
+                return state;
             }
-
-            cancellationToken.ThrowIfCancellationRequested();
 
             var guardScopes = new List<IDisposable>(poseGuards.Length);
             try
@@ -81,20 +81,16 @@ namespace Star67.Avatar.Calibration
                 if (!HumanoidTPoseScope.TryCreate(avatar.Rig, out HumanoidTPoseScope tPoseScope))
                 {
                     Debug.LogWarning($"AvatarCalibrationService: Could not resolve a humanoid T-pose for avatar '{root.name}'. Skipping calibration.");
-                    var runtime = root.GetComponent<AvatarCalibrationRuntime>();
-                    AvatarCalibrated?.Invoke(runtime.State);
-                    return Task.FromResult(runtime);
+                    AvatarCalibrated?.Invoke(state);
+                    return state;
                 }
 
                 using (tPoseScope)
                 {
-                    var state = new AvatarCalibrationState();
                     var context = new AvatarCalibrationContext(avatar, state);
 
                     for (int i = 0; i < calibrationSteps.Length; i++)
                     {
-                        cancellationToken.ThrowIfCancellationRequested();
-
                         IAvatarCalibrationStep step = calibrationSteps[i];
                         if (!step.CanCalibrate(avatar))
                         {
@@ -108,20 +104,12 @@ namespace Star67.Avatar.Calibration
                     if (!state.IsCalibrated)
                     {
                         Debug.LogWarning($"AvatarCalibrationService: Calibration did not capture any reference pose data for avatar '{root.name}'.");
-                        var calibrationRuntime = root.GetComponent<AvatarCalibrationRuntime>();
-                        AvatarCalibrated?.Invoke(calibrationRuntime.State);
-                        return Task.FromResult(calibrationRuntime);
+                        AvatarCalibrated?.Invoke(state);
+                        return state;
                     }
 
-                    AvatarCalibrationRuntime runtime = root.GetComponent<AvatarCalibrationRuntime>();
-                    if (runtime == null)
-                    {
-                        runtime = root.gameObject.AddComponent<AvatarCalibrationRuntime>();
-                    }
-
-                    runtime.SetState(state);
                     AvatarCalibrated?.Invoke(state);
-                    return Task.FromResult(runtime);
+                    return state;
                 }
             }
             finally
@@ -131,6 +119,12 @@ namespace Star67.Avatar.Calibration
                     guardScopes[i]?.Dispose();
                 }
             }
+        }
+
+        public Task<AvatarCalibrationState> CalibrateAsync(IAvatar avatar, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return Task.FromResult(Calibrate(avatar));
         }
     }
 }

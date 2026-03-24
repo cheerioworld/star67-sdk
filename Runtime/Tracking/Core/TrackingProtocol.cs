@@ -2,9 +2,10 @@ namespace Star67.Tracking
 {
     public static class TrackingProtocol
     {
-        public const byte ProtocolVersion = 1;
+        public const byte ProtocolVersion = 2;
         public const int DataPort = 36767;
-        public const int DiscoveryPort = 36768;
+        public const int ControlPort = 36768;
+        public const int DiscoveryPort = ControlPort;
         public const int FaceBlendshapeCount = 52;
         public const int HandJointCount = 21;
         public const int MaxPacketSize = 1200;

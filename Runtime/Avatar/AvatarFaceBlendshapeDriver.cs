@@ -1,16 +1,18 @@
-using System;
 using System.Collections.Generic;
-using System.Text;
 using UnityEngine;
+using System;
+using System.Linq;
+using System.Text;
 
-namespace Star67.Sdk
+namespace Star67.Avatar
 {
+
     /// <summary>
     /// Drives ARKit-compatible face blendshapes across one or more target <see cref="SkinnedMeshRenderer"/> instances.
     /// The driver lazily discovers supported blendshape channels from the current targets, caches the resolved mapping,
     /// and applies incoming <see cref="FaceBlendshape"/> weights to every matching blendshape index.
     /// </summary>
-    public class BasisFaceBlendshapeFrameDriver : IFaceBlendshapeFrameDriver
+    public class AvatarFaceBlendshapeDriver : AvatarComponent, IAvatarFaceBlendshapeDriver
     {
         private readonly Dictionary<FaceBlendshapeLocation, List<BlendshapeTarget>> _targetsByLocation = new();
         private static readonly Dictionary<string, FaceBlendshapeLocation> CanonicalLocationLookup = CreateCanonicalLocationLookup();
@@ -35,36 +37,38 @@ namespace Star67.Sdk
 
         /// <summary>
         /// Creates a new driver for the provided face meshes.
-        /// Blendshape discovery is deferred until the first <see cref="ApplyFrame"/> call or until
-        /// <see cref="UpdateTarget"/> is used to replace the active targets.
+        /// Blendshape discovery is deferred until the first <see cref="Apply"/> call or until
+        /// <see cref="SetTargetRenderers"/> is used to replace the active targets.
         /// </summary>
         /// <param name="faceMeshes">The initial set of skinned mesh renderers that may expose ARKit-compatible blendshapes.</param>
-        public BasisFaceBlendshapeFrameDriver(SkinnedMeshRenderer[] faceMeshes)
+        public AvatarFaceBlendshapeDriver(SkinnedMeshRenderer[] faceMeshes = null)
         {
-            _faceMeshes = faceMeshes;
+            _faceMeshes = faceMeshes ?? Array.Empty<SkinnedMeshRenderer>();
         }
+
+        public AvatarFaceBlendshapeDriver() { }
 
         /// <summary>
         /// Applies a face tracking frame to all discovered target blendshapes.
         /// Weights are interpreted as normalized values in the range 0..1 and converted to Unity's 0..100 blendshape scale.
         /// Channels omitted from the frame are left unchanged.
         /// </summary>
-        /// <param name="frame">The ARKit-style blendshape frame to apply.</param>
-        public void ApplyFrame(FaceBlendshape[] frame)
+        /// <param name="blendshapes">The ARKit-style blendshape frame to apply.</param>
+        public void Apply(FaceBlendshape[] blendshapes)
         {
             if (!_isMapBuilt)
             {
                 RebuildBlendshapeMap();
             }
 
-            if (frame == null || frame.Length == 0)
+            if (blendshapes == null || blendshapes.Length == 0)
             {
                 return;
             }
 
-            for (int i = 0; i < frame.Length; i++)
+            for (int i = 0; i < blendshapes.Length; i++)
             {
-                FaceBlendshape blendshape = frame[i];
+                FaceBlendshape blendshape = blendshapes[i];
                 if (!_targetsByLocation.TryGetValue(blendshape.location, out List<BlendshapeTarget> targets))
                 {
                     continue;
@@ -286,6 +290,19 @@ namespace Star67.Sdk
 
             public SkinnedMeshRenderer Renderer { get; }
             public int BlendShapeIndex { get; }
+        }
+
+        public override string Name => "AvatarFaceBlendshapeDriver";
+        protected override bool TryInitialize()
+        {
+            _faceMeshes = Avatar.FaceTrackingRenderers.ToArray();
+            RebuildBlendshapeMap();
+            return true;
+        }
+
+        protected override void OnRemoved()
+        {
+            Debug.Log("AvatarFaceBlendshapeDriver.OnRemoved()");
         }
     }
 }

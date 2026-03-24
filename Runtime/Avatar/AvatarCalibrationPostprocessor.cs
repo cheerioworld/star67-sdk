@@ -1,6 +1,7 @@
 using System.Threading;
 using System.Threading.Tasks;
 using Star67.Avatar.Calibration;
+using UnityEngine;
 
 namespace Star67.Avatar
 {
@@ -38,7 +39,22 @@ namespace Star67.Avatar
                 return Task.CompletedTask;
             }
 
-            return calibrationService.CalibrateAsync(avatar, ct);
+            if (!avatar.Components.TryGet(out AvatarCalibrationController calibrationController))
+            {
+                calibrationController = new AvatarCalibrationController(calibrationService);
+                if (!avatar.Components.Add(calibrationController))
+                {
+                    Debug.LogWarning($"AvatarCalibrationPostprocessor: Failed to add {nameof(AvatarCalibrationController)} to avatar '{avatar.Rig.Root.name}'.");
+                    return Task.CompletedTask;
+                }
+            }
+            else
+            {
+                calibrationController.SetCalibrationService(calibrationService);
+            }
+
+            calibrationController.Calibrate();
+            return Task.CompletedTask;
         }
     }
 }

@@ -30,7 +30,7 @@ namespace Star67.Sdk.Samples
           { "password", "test" }
         }
       };
-      _avatar = await new Star67AvatarLoader().LoadAvatarAsync(descriptor, transform, new CancellationToken());
+      _avatar = await new BasisAvatarLoader().LoadAvatarAsync(descriptor, transform, new CancellationToken());
       Debug.Log($"Loaded avatar: {_avatar.Descriptor.Uri}");
       // var (basisBundleConnector, basisBundleGenerated, sectionBytes) = await LoadFromLocalBeeAsync(resolvedPath, "test",
       //   new BasisProgressReport(), new CancellationToken());

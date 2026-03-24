@@ -5,14 +5,20 @@ using System.Threading;
 using System.Threading.Tasks;
 using Basis.Scripts.BasisSdk;
 using UnityEngine;
+using UnityEngine.Scripting;
 
 namespace Star67.Avatar
 {
-  public class Star67AvatarLoader : PostprocessedAvatarLoaderBase
+  public class BasisAvatarLoader : PostprocessedAvatarLoaderBase
   {
-    public Star67AvatarLoader(IEnumerable<IAvatarLoaderPostprocessor> postLoadProcessors = null)
+    [Preserve]
+    public BasisAvatarLoader(IEnumerable<IAvatarLoaderPostprocessor> postLoadProcessors = null)
       : base(postLoadProcessors)
     {
+      foreach (var avatarLoaderPostprocessor in postLoadProcessors)
+      {
+        Debug.Log(avatarLoaderPostprocessor.GetType().Name);
+      }
     }
 
     public override bool CanLoad(IAvatarDescriptor descriptor) => descriptor.Type == AvatarType.Basis;
@@ -98,10 +104,12 @@ namespace Star67.Avatar
           }
         }
 
-        Animator animator = spawnedAvatar.GetComponentInChildren<Animator>(true);
-        var rig = new global::Star67.AvatarRootRig(spawnedAvatar.transform, animator);
-        var avatar = new S67BasisAvatar(descriptor, rig);
+        var basisAvatar = spawnedAvatar.GetComponent<BasisAvatar>();
+        var rig = new AvatarRootRig(spawnedAvatar.transform, basisAvatar.Animator);
+        var avatar = new Star67BasisAvatar(descriptor, rig);
         spawnedAvatar = null;
+        
+        avatar.Components.Add<AvatarFaceBlendshapeDriver>();
 
         await Task.Yield();
         return await PostprocessLoadedAvatarAsync(avatar, cancellationToken);
@@ -767,51 +775,6 @@ namespace Star67.Avatar
         : fallbackName;
 
       return $"BasisAvatar_{id}";
-    }
-
-    private sealed class S67BasisAvatar : IAvatar
-    {
-      public IAvatarDescriptor Descriptor { get; }
-      public IAvatarRig Rig { get; }
-      public IList<SkinnedMeshRenderer> FaceTrackingRenderers { get; }
-
-      public S67BasisAvatar(IAvatarDescriptor descriptor, IAvatarRig rig)
-      {
-        Descriptor = descriptor;
-        Rig = rig;
-        FaceTrackingRenderers = CollectFaceTrackingRenderers(rig?.Root);
-      }
-
-      public void Dispose()
-      {
-        Debug.Log("Disposing basis avatar");
-        UnityEngine.Object.Destroy(Rig.Root.gameObject);
-      }
-
-      private static IList<SkinnedMeshRenderer> CollectFaceTrackingRenderers(Transform root)
-      {
-        if (root == null)
-        {
-          return new List<SkinnedMeshRenderer>();
-        }
-
-        var renderers = new List<SkinnedMeshRenderer>();
-        BasisAvatar basisAvatar = root.GetComponentInChildren<BasisAvatar>(true);
-        if (basisAvatar != null)
-        {
-          if (basisAvatar.FaceVisemeMesh != null)
-          {
-            renderers.Add(basisAvatar.FaceVisemeMesh);
-          }
-
-          if (basisAvatar.FaceBlinkMesh != null && !renderers.Contains(basisAvatar.FaceBlinkMesh))
-          {
-            renderers.Add(basisAvatar.FaceBlinkMesh);
-          }
-        }
-
-        return renderers;
-      }
     }
   }
 }

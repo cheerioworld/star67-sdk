@@ -7,14 +7,15 @@ namespace Star67.Tracking
     public sealed class UdpTrackingSender : IDisposable
     {
         private readonly byte[] _receiveBuffer = new byte[64];
+        private readonly byte[] _controlReceiveBuffer = new byte[64];
         private readonly byte[] _sendBuffer = new byte[TrackingProtocol.MaxPacketSize];
         private readonly TrackingSessionInfo _sessionInfo = new TrackingSessionInfo();
-        private readonly DiscoveryAnnouncement _localAnnouncement;
         private readonly int _preferredLocalPort;
 
         private Socket _socket;
-        private TrackingDiscoveryService _discoveryService;
+        private Socket _controlSocket;
         private EndPoint _receiveEndPoint;
+        private EndPoint _controlReceiveEndPoint;
         private IPEndPoint _remoteEndPoint;
         private uint _remoteSessionToken;
         private ulong _nextSequence;
@@ -26,26 +27,23 @@ namespace Star67.Tracking
         {
             _sessionInfo.CopyFrom(sessionInfo);
             _preferredLocalPort = preferredLocalPort;
-            LocalSessionToken = unchecked((uint)Environment.TickCount);
-            _localAnnouncement = new DiscoveryAnnouncement
-            {
-                Role = DiscoveryRole.App,
-                SessionToken = LocalSessionToken
-            };
             State = TrackingConnectionState.Stopped;
         }
 
-        public uint LocalSessionToken { get; }
         public int LocalDataPort { get; private set; }
         public TrackingConnectionState State { get; private set; }
         public TrackingSessionInfo SessionInfo => _sessionInfo;
-        public DiscoveryRegistry Registry => _discoveryService?.Registry;
         public IPEndPoint RemoteEndPoint => _remoteEndPoint;
         public uint RemoteSessionToken => _remoteSessionToken;
 
+        public static string[] GetLocalIPv4Addresses()
+        {
+            return TrackingNetworkUtilities.GetLocalIPv4Addresses();
+        }
+
         public void Start()
         {
-            if (_socket != null)
+            if (_socket != null || _controlSocket != null)
             {
                 return;
             }
@@ -56,10 +54,12 @@ namespace Star67.Tracking
             LocalDataPort = ((IPEndPoint)_socket.LocalEndPoint).Port;
             _receiveEndPoint = new IPEndPoint(IPAddress.Any, 0);
 
-            SyncAnnouncement();
-            _discoveryService = new TrackingDiscoveryService(_localAnnouncement);
-            _discoveryService.Start();
-            State = TrackingConnectionState.Discovering;
+            _controlSocket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
+            _controlSocket.Bind(new IPEndPoint(IPAddress.Any, TrackingProtocol.ControlPort));
+            _controlSocket.Blocking = false;
+            _controlReceiveEndPoint = new IPEndPoint(IPAddress.Any, 0);
+
+            State = TrackingConnectionState.Listening;
         }
 
         public void Stop()
@@ -71,9 +71,6 @@ namespace Star67.Tracking
             _lastConnectRequestTicks = 0;
             _lastHelloTicks = 0;
 
-            _discoveryService?.Dispose();
-            _discoveryService = null;
-
             try
             {
                 _socket?.Close();
@@ -82,50 +79,40 @@ namespace Star67.Tracking
             {
             }
 
+            try
+            {
+                _controlSocket?.Close();
+            }
+            catch
+            {
+            }
+
             _socket = null;
+            _controlSocket = null;
             LocalDataPort = 0;
             State = TrackingConnectionState.Stopped;
         }
 
         public void Update()
         {
-            if (_socket == null || _discoveryService == null)
+            if (_socket == null || _controlSocket == null)
             {
                 return;
             }
 
-            SyncAnnouncement();
-
-            DiscoveryRegistryEntry[] editors = _discoveryService.Registry.Snapshot(TimeSpan.FromMilliseconds(TrackingProtocol.SessionTimeoutMs));
-            if (!TrySelectEditor(editors, out DiscoveryRegistryEntry editor))
-            {
-                _remoteEndPoint = null;
-                _remoteSessionToken = 0;
-                _isHandshakeComplete = false;
-                State = TrackingConnectionState.Discovering;
-                return;
-            }
-
-            IPEndPoint editorEndPoint = new IPEndPoint(editor.RemoteEndPoint.Address, editor.Announcement.DataPort);
-            bool endpointChanged = _remoteEndPoint == null
-                || !_remoteEndPoint.Address.Equals(editorEndPoint.Address)
-                || _remoteEndPoint.Port != editorEndPoint.Port
-                || _remoteSessionToken != editor.Announcement.SessionToken;
-
-            if (endpointChanged)
-            {
-                _isHandshakeComplete = false;
-                _lastConnectRequestTicks = 0;
-                _lastHelloTicks = 0;
-            }
-
-            _remoteEndPoint = editorEndPoint;
-            _remoteSessionToken = editor.Announcement.SessionToken;
-
+            ReceiveRegistrationPackets();
             ReceivePackets();
 
+            if (_remoteEndPoint == null || _remoteSessionToken == 0)
+            {
+                _isHandshakeComplete = false;
+                State = TrackingConnectionState.Listening;
+                return;
+            }
+
             long nowTicks = DateTime.UtcNow.Ticks;
-            if (endpointChanged || nowTicks - _lastConnectRequestTicks >= TimeSpan.FromMilliseconds(TrackingProtocol.DiscoveryIntervalMs).Ticks)
+            if (!_isHandshakeComplete
+                && nowTicks - _lastConnectRequestTicks >= TimeSpan.FromMilliseconds(TrackingProtocol.DiscoveryIntervalMs).Ticks)
             {
                 SendConnectRequest();
                 _lastConnectRequestTicks = nowTicks;
@@ -176,15 +163,6 @@ namespace Star67.Tracking
             Stop();
         }
 
-        private void SyncAnnouncement()
-        {
-            _localAnnouncement.ProtocolVersion = TrackingProtocol.ProtocolVersion;
-            _localAnnouncement.DeviceName = _sessionInfo.DeviceName ?? string.Empty;
-            _localAnnouncement.DataPort = LocalDataPort == 0 ? TrackingProtocol.DataPort : LocalDataPort;
-            _localAnnouncement.PackageVersion = _sessionInfo.AppVersion ?? string.Empty;
-            _localAnnouncement.AvailableFeatures = _sessionInfo.AvailableFeatures;
-        }
-
         private void SendConnectRequest()
         {
             if (_remoteEndPoint == null || _remoteSessionToken == 0)
@@ -225,13 +203,67 @@ namespace Star67.Tracking
             }
             catch (SocketException)
             {
-                State = TrackingConnectionState.Discovering;
+                _isHandshakeComplete = false;
+                State = TrackingConnectionState.Listening;
                 return false;
             }
             catch (ObjectDisposedException)
             {
                 State = TrackingConnectionState.Stopped;
                 return false;
+            }
+        }
+
+        private void ReceiveRegistrationPackets()
+        {
+            if (_controlSocket == null)
+            {
+                return;
+            }
+
+            while (_controlSocket.Poll(0, SelectMode.SelectRead))
+            {
+                try
+                {
+                    int received = _controlSocket.ReceiveFrom(_controlReceiveBuffer, 0, _controlReceiveBuffer.Length, SocketFlags.None, ref _controlReceiveEndPoint);
+                    if (received <= 0)
+                    {
+                        continue;
+                    }
+
+                    ReadOnlySpan<byte> packet = new ReadOnlySpan<byte>(_controlReceiveBuffer, 0, received);
+                    if (!TrackingPacketCodec.TryReadRegisterReceiver(packet, out uint sessionToken, out int receiverDataPort)
+                        || receiverDataPort <= 0
+                        || receiverDataPort > ushort.MaxValue)
+                    {
+                        continue;
+                    }
+
+                    IPEndPoint receiveEndPoint = (IPEndPoint)_controlReceiveEndPoint;
+                    IPEndPoint remoteEndPoint = new IPEndPoint(receiveEndPoint.Address, receiverDataPort);
+                    bool endpointChanged = _remoteEndPoint == null
+                        || !_remoteEndPoint.Address.Equals(remoteEndPoint.Address)
+                        || _remoteEndPoint.Port != remoteEndPoint.Port
+                        || _remoteSessionToken != sessionToken;
+
+                    _remoteEndPoint = remoteEndPoint;
+                    _remoteSessionToken = sessionToken;
+                    if (endpointChanged)
+                    {
+                        _isHandshakeComplete = false;
+                        _lastConnectRequestTicks = 0;
+                        _lastHelloTicks = 0;
+                        State = TrackingConnectionState.Listening;
+                    }
+                }
+                catch (SocketException ex) when (ex.SocketErrorCode == SocketError.WouldBlock || ex.SocketErrorCode == SocketError.TimedOut)
+                {
+                    return;
+                }
+                catch (ObjectDisposedException)
+                {
+                    return;
+                }
             }
         }
 
@@ -273,36 +305,6 @@ namespace Star67.Tracking
                     return;
                 }
             }
-        }
-
-        private static bool TrySelectEditor(DiscoveryRegistryEntry[] entries, out DiscoveryRegistryEntry bestEntry)
-        {
-            bestEntry = default;
-            bool found = false;
-            DateTime latestSeenUtc = DateTime.MinValue;
-
-            if (entries == null)
-            {
-                return false;
-            }
-
-            for (int i = 0; i < entries.Length; i++)
-            {
-                DiscoveryRegistryEntry entry = entries[i];
-                if (entry.Announcement == null || entry.Announcement.Role != DiscoveryRole.Editor)
-                {
-                    continue;
-                }
-
-                if (!found || entry.LastSeenUtc > latestSeenUtc)
-                {
-                    latestSeenUtc = entry.LastSeenUtc;
-                    bestEntry = entry;
-                    found = true;
-                }
-            }
-
-            return found;
         }
 
         private static long GetUtcTimestampUs()

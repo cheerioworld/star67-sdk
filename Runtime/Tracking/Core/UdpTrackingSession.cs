@@ -43,11 +43,26 @@ namespace Star67.Tracking
         /// </summary>
         public uint SessionToken { get; }
 
+        /// <summary>
+        /// Gets the UDP port used by this receiver.
+        /// </summary>
+        public int Port => _port;
+
         /// <inheritdoc />
         public TrackingConnectionState State { get; private set; }
 
         /// <inheritdoc />
         public TrackingSessionInfo SessionInfo => _sessionInfo;
+
+        /// <summary>
+        /// Optional IPv4 address filter for the remote sender.
+        /// </summary>
+        public IPAddress AllowedRemoteAddress { get; set; }
+
+        /// <summary>
+        /// Gets the currently accepted remote endpoint.
+        /// </summary>
+        public IPEndPoint RemoteEndPoint => _remoteEndPoint;
 
         /// <summary>
         /// Optional packet sink that receives raw accepted frame packets.
@@ -172,7 +187,8 @@ namespace Star67.Tracking
         private void HandlePacket(ReadOnlySpan<byte> packet, IPEndPoint remoteEndPoint)
         {
             if (!TrackingPacketCodec.TryReadPacketHeader(packet, out TrackingPacketType packetType, out uint sessionToken, out _)
-                || sessionToken != SessionToken)
+                || sessionToken != SessionToken
+                || !IsAllowedRemoteAddress(remoteEndPoint))
             {
                 return;
             }
@@ -238,6 +254,16 @@ namespace Star67.Tracking
             }
 
             return _remoteEndPoint.Equals(remoteEndPoint);
+        }
+
+        private bool IsAllowedRemoteAddress(IPEndPoint remoteEndPoint)
+        {
+            if (remoteEndPoint == null || AllowedRemoteAddress == null)
+            {
+                return remoteEndPoint != null;
+            }
+
+            return AllowedRemoteAddress.Equals(remoteEndPoint.Address);
         }
     }
 }

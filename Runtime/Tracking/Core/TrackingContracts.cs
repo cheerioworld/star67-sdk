@@ -93,7 +93,8 @@ namespace Star67.Tracking
         ConnectAck = 2,
         Hello = 3,
         Frame = 4,
-        Discovery = 5
+        Discovery = 5,
+        RegisterReceiver = 6
     }
 
     [Serializable]

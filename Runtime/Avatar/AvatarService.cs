@@ -3,17 +3,24 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
+using UnityEngine.Scripting;
 
 namespace Star67.Avatar
 {
   public class AvatarService : IAvatarService
   {
+    public event Action<IAvatar> AvatarLoaded;
+    public event Action<IAvatar> AvatarUnloaded;
+
+    public IAvatar CurrentAvatar => _activeAvatar;
+
     private readonly IEnumerable<IAvatarLoader> _loaders;
     private readonly Transform _avatarParent;
     private readonly SemaphoreSlim _loadLock = new SemaphoreSlim(1, 1);
 
     private IAvatar _activeAvatar;
 
+    [Preserve]
     public AvatarService(IEnumerable<IAvatarLoader> loaders)
     {
       _loaders = loaders ?? throw new ArgumentNullException(nameof(loaders));
@@ -50,6 +57,7 @@ namespace Star67.Avatar
             DisposeAvatar(previousAvatar);
           }
 
+          AvatarLoaded?.Invoke(loadedAvatar);
           return loadedAvatar;
         }
         catch
@@ -81,8 +89,9 @@ namespace Star67.Avatar
       throw new NotSupportedException($"No avatar loader found for avatar type '{descriptor.Type}'.");
     }
 
-    private static void DisposeAvatar(IAvatar avatar)
+    private void DisposeAvatar(IAvatar avatar)
     {
+      AvatarUnloaded?.Invoke(avatar);
       try
       {
         avatar.Dispose();
