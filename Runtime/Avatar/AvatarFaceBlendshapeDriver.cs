@@ -1,12 +1,10 @@
-using System.Collections.Generic;
-using UnityEngine;
 using System;
+using System.Collections.Generic;
 using System.Linq;
-using System.Text;
+using UnityEngine;
 
 namespace Star67.Avatar
 {
-
     /// <summary>
     /// Drives ARKit-compatible face blendshapes across one or more target <see cref="SkinnedMeshRenderer"/> instances.
     /// The driver lazily discovers supported blendshape channels from the current targets, caches the resolved mapping,
@@ -15,22 +13,10 @@ namespace Star67.Avatar
     public class AvatarFaceBlendshapeDriver : AvatarComponent, IAvatarFaceBlendshapeDriver
     {
         private readonly Dictionary<FaceBlendshapeLocation, List<BlendshapeTarget>> _targetsByLocation = new();
-        private static readonly Dictionary<string, FaceBlendshapeLocation> CanonicalLocationLookup = CreateCanonicalLocationLookup();
-        private static readonly HashSet<string> NoiseTokens = new(StringComparer.Ordinal)
-        {
-            "blend",
-            "shape",
-            "blendshape",
-            "morph",
-            "morpher",
-            "expr",
-            "expression",
-            "face",
-            "facial",
-            "arkit",
-            "bs",
-            "key"
-        };
+        private static readonly IReadOnlyDictionary<string, FaceBlendshapeLocation> CamelCaseLocationLookup =
+            FaceBlendshapeNameLookup.CamelCase;
+        private static readonly IReadOnlyDictionary<string, FaceBlendshapeLocation> PascalCaseLocationLookup =
+            FaceBlendshapeNameLookup.PascalCase;
 
         private SkinnedMeshRenderer[] _faceMeshes;
         private bool _isMapBuilt;
@@ -118,10 +104,11 @@ namespace Star67.Avatar
                 }
 
                 Mesh mesh = renderer.sharedMesh;
+                IReadOnlyDictionary<string, FaceBlendshapeLocation> locationLookup = SelectLocationLookup(mesh);
                 for (int blendShapeIndex = 0; blendShapeIndex < mesh.blendShapeCount; blendShapeIndex++)
                 {
                     string blendShapeName = mesh.GetBlendShapeName(blendShapeIndex);
-                    if (!TryResolveLocation(blendShapeName, out FaceBlendshapeLocation location))
+                    if (!locationLookup.TryGetValue(blendShapeName, out FaceBlendshapeLocation location))
                     {
                         continue;
                     }
@@ -139,145 +126,18 @@ namespace Star67.Avatar
             _isMapBuilt = true;
         }
 
-        private static bool TryResolveLocation(string blendShapeName, out FaceBlendshapeLocation location)
+        private static IReadOnlyDictionary<string, FaceBlendshapeLocation> SelectLocationLookup(Mesh mesh)
         {
-            location = default;
-            if (string.IsNullOrWhiteSpace(blendShapeName))
+            for (int blendShapeIndex = 0; blendShapeIndex < mesh.blendShapeCount; blendShapeIndex++)
             {
-                return false;
-            }
-
-            string canonicalName = Canonicalize(blendShapeName);
-            if (canonicalName.Length > 0 && CanonicalLocationLookup.TryGetValue(canonicalName, out location))
-            {
-                return true;
-            }
-
-            string normalizedTokenName = NormalizeTokenizedName(blendShapeName);
-            if (normalizedTokenName.Length == 0)
-            {
-                return false;
-            }
-
-            return CanonicalLocationLookup.TryGetValue(normalizedTokenName, out location);
-        }
-
-        private static Dictionary<string, FaceBlendshapeLocation> CreateCanonicalLocationLookup()
-        {
-            var lookup = new Dictionary<string, FaceBlendshapeLocation>(StringComparer.Ordinal);
-            Array values = Enum.GetValues(typeof(FaceBlendshapeLocation));
-
-            for (int i = 0; i < values.Length; i++)
-            {
-                FaceBlendshapeLocation location = (FaceBlendshapeLocation)values.GetValue(i);
-                lookup[Canonicalize(location.ToString())] = location;
-            }
-
-            return lookup;
-        }
-
-        private static string NormalizeTokenizedName(string blendShapeName)
-        {
-            List<string> tokens = Tokenize(blendShapeName);
-            if (tokens.Count == 0)
-            {
-                return string.Empty;
-            }
-
-            var builder = new StringBuilder();
-            for (int i = 0; i < tokens.Count; i++)
-            {
-                string token = tokens[i];
-                if (token.Length == 0)
+                string blendShapeName = mesh.GetBlendShapeName(blendShapeIndex);
+                if (!string.IsNullOrEmpty(blendShapeName) && CamelCaseLocationLookup.ContainsKey(blendShapeName))
                 {
-                    continue;
-                }
-
-                token = token.ToLowerInvariant();
-                if (NoiseTokens.Contains(token))
-                {
-                    continue;
-                }
-
-                if (token == "l")
-                {
-                    token = "left";
-                }
-                else if (token == "r")
-                {
-                    token = "right";
-                }
-
-                builder.Append(Canonicalize(token));
-            }
-
-            return builder.ToString();
-        }
-
-        private static List<string> Tokenize(string value)
-        {
-            var tokens = new List<string>();
-            var currentToken = new StringBuilder();
-
-            for (int i = 0; i < value.Length; i++)
-            {
-                char currentChar = value[i];
-                if (!char.IsLetterOrDigit(currentChar))
-                {
-                    FlushToken(tokens, currentToken);
-                    continue;
-                }
-
-                if (currentToken.Length > 0)
-                {
-                    char previousChar = currentToken[currentToken.Length - 1];
-                    if (ShouldSplitToken(previousChar, currentChar))
-                    {
-                        FlushToken(tokens, currentToken);
-                    }
-                }
-
-                currentToken.Append(currentChar);
-            }
-
-            FlushToken(tokens, currentToken);
-            return tokens;
-        }
-
-        private static bool ShouldSplitToken(char previousChar, char currentChar)
-        {
-            if (char.IsDigit(previousChar) != char.IsDigit(currentChar))
-            {
-                return true;
-            }
-
-            return char.IsLower(previousChar) && char.IsUpper(currentChar);
-        }
-
-        private static void FlushToken(List<string> tokens, StringBuilder currentToken)
-        {
-            if (currentToken.Length == 0)
-            {
-                return;
-            }
-
-            tokens.Add(currentToken.ToString());
-            currentToken.Clear();
-        }
-
-        private static string Canonicalize(string value)
-        {
-            var builder = new StringBuilder(value.Length);
-            for (int i = 0; i < value.Length; i++)
-            {
-                char currentChar = value[i];
-                if (char.IsLetterOrDigit(currentChar))
-                {
-                    builder.Append(char.ToLowerInvariant(currentChar));
+                    return CamelCaseLocationLookup;
                 }
             }
 
-            return builder.ToString();
+            return PascalCaseLocationLookup;
         }
 
         private readonly struct BlendshapeTarget
