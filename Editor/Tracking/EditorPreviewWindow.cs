@@ -12,10 +12,12 @@ namespace Star67.Tracking.Editor
         private const double ActiveRepaintIntervalSeconds = 0.2d;
         private const string RecordingPathKey = "Star67.Tracking.Editor.RecordingPath";
         private const string SenderIpAddressKey = "Star67.Tracking.Editor.SenderIpAddress";
+        private const string ReceiverIpAddressKey = "Star67.Tracking.Editor.ReceiverIpAddress";
 
         [SerializeField] private EditorPreviewManager manager;
         [SerializeField] private string recordingPath;
         [SerializeField] private string senderIpAddress;
+        [SerializeField] private string receiverIpAddress;
         [SerializeField] private bool loopPlayback;
 
         private string playModeStatus;
@@ -60,9 +62,11 @@ namespace Star67.Tracking.Editor
 
         private void OnEnable()
         {
-            cachedLocalIPv4Addresses = TrackingNetworkUtilities.GetLocalIPv4Addresses();
+            RefreshLocalIpv4Addresses();
             recordingPath = EditorPrefs.GetString(RecordingPathKey, GetDefaultRecordingPath());
             senderIpAddress = EditorPrefs.GetString(SenderIpAddressKey, string.Empty);
+            receiverIpAddress = EditorPrefs.GetString(ReceiverIpAddressKey, string.Empty);
+            EnsureValidReceiverIpSelection();
             EditorApplication.playModeStateChanged += OnPlayModeStateChanged;
             ResetPlayModeResolutionState();
             RefreshEditorTickRegistration();
@@ -140,13 +144,11 @@ namespace Star67.Tracking.Editor
         private void DrawLiveSection()
         {
             EditorGUILayout.LabelField("Live Preview", EditorStyles.boldLabel);
-            using (new EditorGUILayout.HorizontalScope())
-            {
-                EditorGUILayout.LabelField("Receiver IPv4", string.Join(", ", cachedLocalIPv4Addresses), GUILayout.MaxWidth(position.width - 120f));
-            }
 
             using (new EditorGUI.DisabledScope(liveClient != null))
             {
+                DrawReceiverIpSelection();
+
                 EditorGUI.BeginChangeCheck();
                 string newSenderIpAddress = EditorGUILayout.TextField("Sender IP", senderIpAddress ?? string.Empty);
                 if (EditorGUI.EndChangeCheck())
@@ -157,12 +159,18 @@ namespace Star67.Tracking.Editor
             }
 
             bool hasValidSenderIp = TryGetConfiguredSenderAddress(out _, out string senderIpValidationMessage);
+            bool hasValidReceiverIp = TryGetConfiguredReceiverAddress(out _, out string receiverIpValidationMessage);
+            if (!hasValidReceiverIp)
+            {
+                EditorGUILayout.HelpBox(receiverIpValidationMessage, MessageType.Error);
+            }
+
             if (!hasValidSenderIp)
             {
                 EditorGUILayout.HelpBox(senderIpValidationMessage, MessageType.Error);
             }
 
-            using (new EditorGUI.DisabledScope(IsPreviewUnavailableInPlayMode() || !hasValidSenderIp))
+            using (new EditorGUI.DisabledScope(IsPreviewUnavailableInPlayMode() || !hasValidSenderIp || !hasValidReceiverIp))
             {
                 if (liveClient == null)
                 {
@@ -190,6 +198,7 @@ namespace Star67.Tracking.Editor
             {
                 EditorGUILayout.LabelField("Session Token", liveClient.SessionToken.ToString());
                 EditorGUILayout.LabelField("Sender Endpoint", liveClient.RemoteEndPoint != null ? liveClient.RemoteEndPoint.ToString() : "(waiting)");
+                EditorGUILayout.LabelField("Receiver Bind IP", liveClient.LocalBindAddress != null ? liveClient.LocalBindAddress.ToString() : "(any)");
                 EditorGUILayout.LabelField("Device", string.IsNullOrEmpty(liveClient.SessionInfo.DeviceName) ? "(waiting)" : liveClient.SessionInfo.DeviceName);
                 EditorGUILayout.LabelField("App Version", string.IsNullOrEmpty(liveClient.SessionInfo.AppVersion) ? "(waiting)" : liveClient.SessionInfo.AppVersion);
                 EditorGUILayout.LabelField("Features", liveClient.SessionInfo.AvailableFeatures.ToString());
@@ -317,6 +326,11 @@ namespace Star67.Tracking.Editor
                 return;
             }
 
+            if (!TryGetConfiguredReceiverAddress(out IPAddress configuredReceiverAddress, out _))
+            {
+                return;
+            }
+
             StopPlayback();
             StopLive();
             if (!EnsurePreviewManagerForPlayMode())
@@ -326,7 +340,7 @@ namespace Star67.Tracking.Editor
 
             try
             {
-                liveClient = new UdpTrackingReceiverClient(configuredSenderAddress);
+                liveClient = new UdpTrackingReceiverClient(configuredSenderAddress, localBindAddress: configuredReceiverAddress);
                 liveClient.Start();
             }
             catch (Exception exception)
@@ -482,6 +496,103 @@ namespace Star67.Tracking.Editor
 
             validationMessage = null;
             return true;
+        }
+
+        private bool TryGetConfiguredReceiverAddress(out IPAddress configuredReceiverAddress, out string validationMessage)
+        {
+            configuredReceiverAddress = null;
+            if (cachedLocalIPv4Addresses == null || cachedLocalIPv4Addresses.Length == 0)
+            {
+                validationMessage = "No usable local IPv4 addresses were found for the editor receiver.";
+                return false;
+            }
+
+            if (string.IsNullOrWhiteSpace(receiverIpAddress))
+            {
+                validationMessage = "Select the receiver's local IPv4 address to start live preview.";
+                return false;
+            }
+
+            if (Array.IndexOf(cachedLocalIPv4Addresses, receiverIpAddress) < 0)
+            {
+                validationMessage = "Selected receiver IP is no longer available on this machine. Refresh the list and choose an active local IPv4 address.";
+                return false;
+            }
+
+            if (!IPAddress.TryParse(receiverIpAddress, out configuredReceiverAddress) || configuredReceiverAddress.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork)
+            {
+                configuredReceiverAddress = null;
+                validationMessage = "Receiver IP must be a valid local IPv4 address.";
+                return false;
+            }
+
+            validationMessage = null;
+            return true;
+        }
+
+        private void DrawReceiverIpSelection()
+        {
+            using (new EditorGUILayout.HorizontalScope())
+            {
+                if (cachedLocalIPv4Addresses.Length == 0)
+                {
+                    EditorGUILayout.TextField("Receiver IP", "(none)");
+                }
+                else
+                {
+                    int selectedIndex = GetSelectedReceiverIpIndex();
+                    EditorGUI.BeginChangeCheck();
+                    int newSelectedIndex = EditorGUILayout.Popup("Receiver IP", selectedIndex, cachedLocalIPv4Addresses);
+                    if (EditorGUI.EndChangeCheck()
+                        && newSelectedIndex >= 0
+                        && newSelectedIndex < cachedLocalIPv4Addresses.Length)
+                    {
+                        receiverIpAddress = cachedLocalIPv4Addresses[newSelectedIndex];
+                        EditorPrefs.SetString(ReceiverIpAddressKey, receiverIpAddress);
+                    }
+                }
+
+                if (GUILayout.Button("Refresh", GUILayout.Width(70f)))
+                {
+                    RefreshLocalIpv4Addresses();
+                    EnsureValidReceiverIpSelection();
+                }
+            }
+        }
+
+        private void RefreshLocalIpv4Addresses()
+        {
+            cachedLocalIPv4Addresses = TrackingNetworkUtilities.GetLocalIPv4Addresses();
+        }
+
+        private void EnsureValidReceiverIpSelection()
+        {
+            if (cachedLocalIPv4Addresses == null || cachedLocalIPv4Addresses.Length == 0)
+            {
+                receiverIpAddress = string.Empty;
+                EditorPrefs.SetString(ReceiverIpAddressKey, receiverIpAddress);
+                return;
+            }
+
+            if (!string.IsNullOrWhiteSpace(receiverIpAddress)
+                && Array.IndexOf(cachedLocalIPv4Addresses, receiverIpAddress) >= 0)
+            {
+                return;
+            }
+
+            receiverIpAddress = cachedLocalIPv4Addresses[0];
+            EditorPrefs.SetString(ReceiverIpAddressKey, receiverIpAddress);
+        }
+
+        private int GetSelectedReceiverIpIndex()
+        {
+            if (cachedLocalIPv4Addresses == null || cachedLocalIPv4Addresses.Length == 0)
+            {
+                return -1;
+            }
+
+            int selectedIndex = Array.IndexOf(cachedLocalIPv4Addresses, receiverIpAddress);
+            return selectedIndex >= 0 ? selectedIndex : 0;
         }
 
         private void OnPlayModeStateChanged(PlayModeStateChange change)

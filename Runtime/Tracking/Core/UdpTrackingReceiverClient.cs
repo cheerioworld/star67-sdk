@@ -11,13 +11,19 @@ namespace Star67.Tracking
     {
         private readonly UdpTrackingSession _session;
         private readonly IPEndPoint _serverControlEndPoint;
+        private readonly IPAddress _localBindAddress;
         private readonly byte[] _sendBuffer = new byte[64];
 
         private Socket _registrationSocket;
         private bool _isStarted;
         private long _lastRegistrationTicks;
 
-        public UdpTrackingReceiverClient(IPAddress serverIpAddress, int serverControlPort = TrackingProtocol.ControlPort, int localDataPort = TrackingProtocol.DataPort, uint? sessionToken = null)
+        public UdpTrackingReceiverClient(
+            IPAddress serverIpAddress,
+            int serverControlPort = TrackingProtocol.ControlPort,
+            int localDataPort = TrackingProtocol.DataPort,
+            uint? sessionToken = null,
+            IPAddress localBindAddress = null)
         {
             if (serverIpAddress == null)
             {
@@ -29,8 +35,14 @@ namespace Star67.Tracking
                 throw new ArgumentException("Only IPv4 server addresses are supported.", nameof(serverIpAddress));
             }
 
+            if (localBindAddress != null && localBindAddress.AddressFamily != AddressFamily.InterNetwork)
+            {
+                throw new ArgumentException("Only IPv4 local bind addresses are supported.", nameof(localBindAddress));
+            }
+
+            _localBindAddress = localBindAddress;
             _serverControlEndPoint = new IPEndPoint(serverIpAddress, serverControlPort);
-            _session = new UdpTrackingSession(localDataPort, sessionToken)
+            _session = new UdpTrackingSession(localDataPort, sessionToken, localBindAddress)
             {
                 AllowedRemoteAddress = serverIpAddress
             };
@@ -40,6 +52,7 @@ namespace Star67.Tracking
         public TrackingSessionInfo SessionInfo => _session.SessionInfo;
         public uint SessionToken => _session.SessionToken;
         public int LocalDataPort => _session.Port;
+        public IPAddress LocalBindAddress => _localBindAddress;
         public IPAddress ServerIpAddress => _serverControlEndPoint.Address;
         public int ServerControlPort => _serverControlEndPoint.Port;
         public IPEndPoint RemoteEndPoint => _session.RemoteEndPoint;
@@ -61,7 +74,7 @@ namespace Star67.Tracking
             try
             {
                 _registrationSocket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
-                _registrationSocket.Bind(new IPEndPoint(IPAddress.Any, 0));
+                _registrationSocket.Bind(new IPEndPoint(_localBindAddress ?? IPAddress.Any, 0));
             }
             catch
             {

@@ -18,7 +18,10 @@ namespace Star67.Tracking
                 for (int i = 0; i < interfaces.Length; i++)
                 {
                     NetworkInterface networkInterface = interfaces[i];
-                    if (networkInterface == null || networkInterface.NetworkInterfaceType == NetworkInterfaceType.Loopback)
+                    if (networkInterface == null
+                        || networkInterface.OperationalStatus != OperationalStatus.Up
+                        || networkInterface.NetworkInterfaceType == NetworkInterfaceType.Loopback
+                        || networkInterface.NetworkInterfaceType == NetworkInterfaceType.Tunnel)
                     {
                         continue;
                     }
@@ -35,7 +38,8 @@ namespace Star67.Tracking
                         IPAddress address = unicastAddresses[j].Address;
                         if (address == null
                             || address.AddressFamily != AddressFamily.InterNetwork
-                            || IPAddress.IsLoopback(address))
+                            || IPAddress.IsLoopback(address)
+                            || IsApipaAddress(address))
                         {
                             continue;
                         }
@@ -61,6 +65,11 @@ namespace Star67.Tracking
                             continue;
                         }
 
+                        if (IsApipaAddress(address))
+                        {
+                            continue;
+                        }
+
                         addresses.Add(address.ToString());
                     }
                 }
@@ -73,6 +82,15 @@ namespace Star67.Tracking
             addresses.CopyTo(results);
             Array.Sort(results, StringComparer.Ordinal);
             return results;
+        }
+
+        private static bool IsApipaAddress(IPAddress address)
+        {
+            byte[] bytes = address?.GetAddressBytes();
+            return bytes != null
+                && bytes.Length == 4
+                && bytes[0] == 169
+                && bytes[1] == 254;
         }
     }
 }

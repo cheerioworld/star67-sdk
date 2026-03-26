@@ -17,6 +17,7 @@ namespace Star67.Tracking
         private readonly byte[] _receiveBuffer = new byte[TrackingProtocol.MaxPacketSize];
         private readonly byte[] _sendBuffer = new byte[64];
         private readonly int _port;
+        private readonly IPAddress _localBindAddress;
 
         private Socket _socket;
         private Thread _thread;
@@ -31,9 +32,15 @@ namespace Star67.Tracking
         /// </summary>
         /// <param name="port">UDP port to listen on.</param>
         /// <param name="sessionToken">Optional fixed session token; when omitted a token is generated.</param>
-        public UdpTrackingSession(int port = TrackingProtocol.DataPort, uint? sessionToken = null)
+        public UdpTrackingSession(int port = TrackingProtocol.DataPort, uint? sessionToken = null, IPAddress localBindAddress = null)
         {
+            if (localBindAddress != null && localBindAddress.AddressFamily != AddressFamily.InterNetwork)
+            {
+                throw new ArgumentException("Only IPv4 local bind addresses are supported.", nameof(localBindAddress));
+            }
+
             _port = port;
+            _localBindAddress = localBindAddress;
             SessionToken = sessionToken ?? (uint)Environment.TickCount;
             State = TrackingConnectionState.Stopped;
         }
@@ -47,6 +54,11 @@ namespace Star67.Tracking
         /// Gets the UDP port used by this receiver.
         /// </summary>
         public int Port => _port;
+
+        /// <summary>
+        /// Gets the optional local IPv4 address used when binding this receiver.
+        /// </summary>
+        public IPAddress LocalBindAddress => _localBindAddress;
 
         /// <inheritdoc />
         public TrackingConnectionState State { get; private set; }
@@ -80,7 +92,7 @@ namespace Star67.Tracking
             }
 
             _socket = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
-            _socket.Bind(new IPEndPoint(IPAddress.Any, _port));
+            _socket.Bind(new IPEndPoint(_localBindAddress ?? IPAddress.Any, _port));
             _socket.ReceiveTimeout = 250;
             _isRunning = true;
             _lastActivityTicks = DateTime.UtcNow.Ticks;
