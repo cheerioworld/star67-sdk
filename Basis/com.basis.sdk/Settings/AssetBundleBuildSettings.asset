@@ -21,7 +21,7 @@ MonoBehaviour:
   BasisMetaEncryptedExtension: .BEM
   BasisEncryptedExtension: .BEE
   ProtectedPasswordFileName: dontuploadmepassword
-  UserSelectedPassword: test
+  UserSelectedPassword: supereasypassword
   UseCustomPassword: 1
   useCompression: 1
   GenerateImage: 1
@@ -29,7 +29,7 @@ MonoBehaviour:
   RebakeOcclusionCulling: 1
   BuildTarget: 19
   BuildAssetBundleOptions: 256
-  AssetBundleDirectory: ./AssetBundles
+  AssetBundleDirectory: ./avatars/sandbox
   AssetBundleUnCombined: ./AssetCache
-  selectedTargets: 0900000002000000
+  selectedTargets: 0200000009000000
   RebakeOcclusionCullingInThese: 14000000090000000d000000
