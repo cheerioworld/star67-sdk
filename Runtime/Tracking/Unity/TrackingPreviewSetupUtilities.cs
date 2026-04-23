@@ -12,8 +12,6 @@ namespace Star67.Tracking.Unity
         public const string HeadWorldTargetName = "HeadWorld";
         public const string LeftWristTargetName = "LeftWrist";
         public const string RightWristTargetName = "RightWrist";
-        public const string LeftHandRootName = "LeftHand";
-        public const string RightHandRootName = "RightHand";
 
         public static UserTrackingService EnsureSceneUserTrackingService(Scene scene)
         {
@@ -211,18 +209,6 @@ namespace Star67.Tracking.Unity
             rig.HeadWorldTarget = ensureChild(targetsRoot, HeadWorldTargetName);
             rig.LeftWristTarget = ensureChild(targetsRoot, LeftWristTargetName);
             rig.RightWristTarget = ensureChild(targetsRoot, RightWristTargetName);
-
-            Transform leftHandRoot = ensureChild(targetsRoot, LeftHandRootName);
-            Transform rightHandRoot = ensureChild(targetsRoot, RightHandRootName);
-
-            Transform[] leftHandJointTargets = rig.LeftHandJointTargets;
-            Transform[] rightHandJointTargets = rig.RightHandJointTargets;
-            for (int i = 0; i < TrackingProtocol.HandJointCount; i++)
-            {
-                string jointName = ((HandJointId)i).ToString();
-                leftHandJointTargets[i] = ensureChild(leftHandRoot, jointName);
-                rightHandJointTargets[i] = ensureChild(rightHandRoot, jointName);
-            }
 
             return rig;
         }

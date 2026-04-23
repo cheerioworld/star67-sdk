@@ -3,52 +3,29 @@ using Unity.Mathematics;
 
 namespace Star67.Tracking
 {
-    /// <summary>
-    /// Mutable hand-tracking payload that stores a fixed set of joint positions.
-    /// </summary>
     public sealed class TrackedHandData
     {
-        /// <summary>
-        /// Indicates whether this hand payload currently contains tracked data.
-        /// </summary>
         public bool IsTracked;
-
-        /// <summary>
-        /// Confidence value for this hand sample, usually in the range [0, 1].
-        /// </summary>
         public float Confidence;
+        public TrackingPose WristPoseSourceSpace;
+        public SemanticThumbPose Thumb;
+        public SemanticFingerPose Index;
+        public SemanticFingerPose Middle;
+        public SemanticFingerPose Ring;
+        public SemanticFingerPose Little;
 
-        /// <summary>
-        /// Joint positions in camera-local space using <see cref="HandJointId"/> ordering.
-        /// </summary>
-        public float3[] JointPositions { get; }
-
-        /// <summary>
-        /// Creates a hand payload with preallocated joint storage.
-        /// </summary>
-        public TrackedHandData()
-        {
-            JointPositions = new float3[TrackingProtocol.HandJointCount];
-            Clear();
-        }
-
-        /// <summary>
-        /// Resets the hand payload to an untracked state.
-        /// </summary>
         public void Clear()
         {
             IsTracked = false;
             Confidence = 0f;
-            for (int i = 0; i < JointPositions.Length; i++)
-            {
-                JointPositions[i] = float3.zero;
-            }
+            WristPoseSourceSpace = TrackingPose.Identity;
+            Thumb = default;
+            Index = default;
+            Middle = default;
+            Ring = default;
+            Little = default;
         }
 
-        /// <summary>
-        /// Copies all hand data from <paramref name="source"/>.
-        /// </summary>
-        /// <param name="source">Source hand payload to copy from.</param>
         public void CopyFrom(TrackedHandData source)
         {
             if (source == null)
@@ -59,52 +36,12 @@ namespace Star67.Tracking
 
             IsTracked = source.IsTracked;
             Confidence = source.Confidence;
-            Array.Copy(source.JointPositions, JointPositions, JointPositions.Length);
-        }
-
-        /// <summary>
-        /// Sets a joint position by raw joint index.
-        /// </summary>
-        /// <param name="jointIndex">Joint index in protocol ordering.</param>
-        /// <param name="x">Joint X position in camera-local space.</param>
-        /// <param name="y">Joint Y position in camera-local space.</param>
-        /// <param name="z">Joint Z position in camera-local space.</param>
-        public void SetJointPosition(int jointIndex, float x, float y, float z)
-        {
-            JointPositions[jointIndex] = new float3(x, y, z);
-        }
-
-        /// <summary>
-        /// Sets a joint position by strongly-typed joint id.
-        /// </summary>
-        /// <param name="jointId">Joint identifier.</param>
-        /// <param name="x">Joint X position in camera-local space.</param>
-        /// <param name="y">Joint Y position in camera-local space.</param>
-        /// <param name="z">Joint Z position in camera-local space.</param>
-        public void SetJointPosition(HandJointId jointId, float x, float y, float z)
-        {
-            SetJointPosition((int)jointId, x, y, z);
-        }
-
-        /// <summary>
-        /// Gets a joint position as a serializable value type.
-        /// </summary>
-        /// <param name="jointIndex">Joint index in protocol ordering.</param>
-        /// <returns>The requested joint position.</returns>
-        public TrackingVector3Value GetJointPositionValue(int jointIndex)
-        {
-            float3 jointPosition = JointPositions[jointIndex];
-            return new TrackingVector3Value(jointPosition.x, jointPosition.y, jointPosition.z);
-        }
-
-        /// <summary>
-        /// Gets a joint position as a serializable value type.
-        /// </summary>
-        /// <param name="jointId">Joint identifier.</param>
-        /// <returns>The requested joint position.</returns>
-        public TrackingVector3Value GetJointPositionValue(HandJointId jointId)
-        {
-            return GetJointPositionValue((int)jointId);
+            WristPoseSourceSpace = source.WristPoseSourceSpace;
+            Thumb = source.Thumb;
+            Index = source.Index;
+            Middle = source.Middle;
+            Ring = source.Ring;
+            Little = source.Little;
         }
     }
 

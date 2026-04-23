@@ -54,8 +54,8 @@ namespace Star67.Tracking.Unity
             ApplyPose(rig.HeadWorldTarget, headWorldPose, _avatarHeight);
             state.HeadTracked = (frame.Features & TrackingFeatureFlags.HeadPose) != 0;
 
-            ApplyHand(frame.CameraWorldPose, frame.LeftHand, rig.LeftWristTarget, rig.LeftHandJointTargets, ref state.LeftHandTracked);
-            ApplyHand(frame.CameraWorldPose, frame.RightHand, rig.RightWristTarget, rig.RightHandJointTargets, ref state.RightHandTracked);
+            ApplyHand(frame.CameraWorldPose, frame.LeftHand, rig.LeftWristTarget, ref state.LeftHandTracked);
+            ApplyHand(frame.CameraWorldPose, frame.RightHand, rig.RightWristTarget, ref state.RightHandTracked);
         }
 
         /// <inheritdoc />
@@ -83,69 +83,17 @@ namespace Star67.Tracking.Unity
             target.rotation = ToQuaternion(pose.GetRotationValue());
         }
 
-        private static void ApplyHand(TrackingPose cameraWorldPose, TrackedHandData hand, Transform wristTarget, Transform[] jointTargets, ref bool handTracked)
+        private static void ApplyHand(TrackingPose cameraWorldPose, TrackedHandData hand, Transform wristTarget, ref bool handTracked)
         {
             handTracked = hand != null && hand.IsTracked;
-            if (!handTracked)
+            if (!handTracked || wristTarget == null)
             {
                 return;
             }
 
-            if (wristTarget != null)
-            {
-                wristTarget.position = ToVector3(TrackingMath.TransformPointValue(cameraWorldPose, hand.GetJointPositionValue(HandJointId.Wrist)));
-                if (TryComputeWristRotation(hand, cameraWorldPose, out Quaternion wristRotation))
-                {
-                    wristTarget.rotation = wristRotation;
-                }
-            }
-
-            if (jointTargets == null)
-            {
-                return;
-            }
-
-            int count = Mathf.Min(jointTargets.Length, TrackingProtocol.HandJointCount);
-            for (int i = 0; i < count; i++)
-            {
-                Transform jointTarget = jointTargets[i];
-                if (jointTarget == null)
-                {
-                    continue;
-                }
-
-                TrackingVector3Value worldPosition = TrackingMath.TransformPointValue(cameraWorldPose, hand.GetJointPositionValue(i));
-                jointTarget.position = ToVector3(worldPosition);
-            }
-        }
-
-        private static bool TryComputeWristRotation(TrackedHandData hand, TrackingPose cameraWorldPose, out Quaternion worldRotation)
-        {
-            worldRotation = Quaternion.identity;
-            Vector3 wrist = ToVector3(hand.GetJointPositionValue(HandJointId.Wrist));
-            Vector3 index = ToVector3(hand.GetJointPositionValue(HandJointId.IndexMcp));
-            Vector3 pinky = ToVector3(hand.GetJointPositionValue(HandJointId.PinkyMcp));
-            Vector3 middle = ToVector3(hand.GetJointPositionValue(HandJointId.MiddleMcp));
-
-            Vector3 across = index - pinky;
-            Vector3 forward = middle - wrist;
-            if (across.sqrMagnitude < 1e-6f || forward.sqrMagnitude < 1e-6f)
-            {
-                return false;
-            }
-
-            across.Normalize();
-            forward.Normalize();
-            Vector3 up = Vector3.Cross(forward, across);
-            if (up.sqrMagnitude < 1e-6f)
-            {
-                return false;
-            }
-
-            up.Normalize();
-            Quaternion localRotation = Quaternion.LookRotation(forward, up);
-            worldRotation = ToQuaternion(cameraWorldPose.GetRotationValue()) * localRotation;
-            return true;
+            TrackingPose wristWorldPose = TrackingMath.Combine(cameraWorldPose, hand.WristPoseSourceSpace);
+            wristTarget.position = ToVector3(wristWorldPose.GetPositionValue());
+            wristTarget.rotation = ToQuaternion(wristWorldPose.GetRotationValue());
         }
 
         private static Vector3 ToVector3(TrackingVector3Value value)

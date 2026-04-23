@@ -438,6 +438,15 @@ namespace Star67.Tracking
 
             InterpolateHand(from.LeftHand, to.LeftHand, t, destination.LeftHand);
             InterpolateHand(from.RightHand, to.RightHand, t, destination.RightHand);
+            if (!destination.LeftHand.IsTracked)
+            {
+                destination.Features &= ~TrackingFeatureFlags.LeftHand;
+            }
+
+            if (!destination.RightHand.IsTracked)
+            {
+                destination.Features &= ~TrackingFeatureFlags.RightHand;
+            }
         }
 
         private static TrackingPose LerpPose(TrackingPose from, TrackingPose to, float t)
@@ -473,10 +482,12 @@ namespace Star67.Tracking
 
             destination.IsTracked = true;
             destination.Confidence = math.lerp(from.Confidence, to.Confidence, t);
-            for (int i = 0; i < TrackingProtocol.HandJointCount; i++)
-            {
-                destination.JointPositions[i] = math.lerp(from.JointPositions[i], to.JointPositions[i], t);
-            }
+            destination.WristPoseSourceSpace = LerpPose(from.WristPoseSourceSpace, to.WristPoseSourceSpace, t);
+            destination.Thumb = SemanticThumbPose.Lerp(from.Thumb, to.Thumb, t);
+            destination.Index = SemanticFingerPose.Lerp(from.Index, to.Index, t);
+            destination.Middle = SemanticFingerPose.Lerp(from.Middle, to.Middle, t);
+            destination.Ring = SemanticFingerPose.Lerp(from.Ring, to.Ring, t);
+            destination.Little = SemanticFingerPose.Lerp(from.Little, to.Little, t);
         }
     }
 
