@@ -10,6 +10,7 @@ namespace Star67.Tracking.Unity
         public bool IsApplied;
         public bool IsTracked;
         public float Confidence;
+        public string SourceHandSlot = string.Empty;
         public string MissingBones = string.Empty;
         public string Summary = string.Empty;
         public SemanticThumbPose Thumb;
@@ -23,6 +24,7 @@ namespace Star67.Tracking.Unity
             IsApplied = false;
             IsTracked = false;
             Confidence = 0f;
+            SourceHandSlot = string.Empty;
             Summary = string.Empty;
             Thumb = default(SemanticThumbPose);
             Index = default(SemanticFingerPose);
@@ -41,6 +43,7 @@ namespace Star67.Tracking.Unity
         [SerializeField] private bool _applyRightHand = true;
         [SerializeField] private bool _resetUntrackedHands = true;
         [SerializeField] private bool _captureCalibrationOnEnable = true;
+        [SerializeField] private bool _mirrorHandsForSelfie;
         [SerializeField] private SemanticHandPoseSettings _poseSettings = SemanticHandPoseSettings.Default;
         [SerializeField] private SemanticHumanoidHandCalibration _calibration = new SemanticHumanoidHandCalibration();
         [SerializeField] private SemanticHumanoidHandRetargetDiagnostics _leftDiagnostics = new SemanticHumanoidHandRetargetDiagnostics();
@@ -52,6 +55,11 @@ namespace Star67.Tracking.Unity
         public SemanticHumanoidHandCalibration Calibration => _calibration;
         public SemanticHumanoidHandRetargetDiagnostics LeftDiagnostics => _leftDiagnostics;
         public SemanticHumanoidHandRetargetDiagnostics RightDiagnostics => _rightDiagnostics;
+        public bool MirrorHandsForSelfie
+        {
+            get => _mirrorHandsForSelfie;
+            set => _mirrorHandsForSelfie = value;
+        }
 
         private void Awake()
         {
@@ -141,8 +149,14 @@ namespace Star67.Tracking.Unity
 
             EnsureCalibration();
             EnsureCalibrationBindings();
-            ApplyTrackedHand(_calibration.LeftHand, frame.LeftHand, _leftDiagnostics, _applyLeftHand);
-            ApplyTrackedHand(_calibration.RightHand, frame.RightHand, _rightDiagnostics, _applyRightHand);
+            // Selfie mode should behave like a mirror: the user's right hand drives the avatar's left fingers.
+            TrackedHandData leftTargetSourceHand = _mirrorHandsForSelfie ? frame.RightHand : frame.LeftHand;
+            TrackedHandData rightTargetSourceHand = _mirrorHandsForSelfie ? frame.LeftHand : frame.RightHand;
+            string leftTargetSourceSlot = _mirrorHandsForSelfie ? "RightHand" : "LeftHand";
+            string rightTargetSourceSlot = _mirrorHandsForSelfie ? "LeftHand" : "RightHand";
+
+            ApplyTrackedHand(_calibration.LeftHand, leftTargetSourceHand, leftTargetSourceSlot, _leftDiagnostics, _applyLeftHand);
+            ApplyTrackedHand(_calibration.RightHand, rightTargetSourceHand, rightTargetSourceSlot, _rightDiagnostics, _applyRightHand);
         }
 
         public void ResetState()
@@ -158,6 +172,7 @@ namespace Star67.Tracking.Unity
         private void ApplyTrackedHand(
             SemanticHumanoidHandCalibrationData calibration,
             TrackedHandData trackedHand,
+            string sourceHandSlot,
             SemanticHumanoidHandRetargetDiagnostics diagnostics,
             bool isEnabled)
         {
@@ -170,6 +185,7 @@ namespace Star67.Tracking.Unity
             diagnostics.MissingBones = calibration != null ? calibration.MissingBones ?? string.Empty : "Not calibrated.";
             diagnostics.IsTracked = trackedHand != null && trackedHand.IsTracked;
             diagnostics.Confidence = trackedHand != null ? trackedHand.Confidence : 0f;
+            diagnostics.SourceHandSlot = sourceHandSlot ?? string.Empty;
             diagnostics.IsApplied = false;
 
             if (!isEnabled)
@@ -196,7 +212,7 @@ namespace Star67.Tracking.Unity
                 diagnostics.Middle = default(SemanticFingerPose);
                 diagnostics.Ring = default(SemanticFingerPose);
                 diagnostics.Little = default(SemanticFingerPose);
-                diagnostics.Summary = "untracked";
+                diagnostics.Summary = $"{diagnostics.SourceHandSlot} untracked";
                 return;
             }
 
@@ -212,7 +228,7 @@ namespace Star67.Tracking.Unity
             diagnostics.Middle = trackedHand.Middle;
             diagnostics.Ring = trackedHand.Ring;
             diagnostics.Little = trackedHand.Little;
-            diagnostics.Summary = BuildSummary(trackedHand);
+            diagnostics.Summary = $"{diagnostics.SourceHandSlot} {BuildSummary(trackedHand)}";
         }
 
         private void ApplyFinger(SemanticHumanoidFingerCalibration calibration, SemanticFingerPose pose)

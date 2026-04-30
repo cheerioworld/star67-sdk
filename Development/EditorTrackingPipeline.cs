@@ -54,6 +54,10 @@ namespace Star67.Sdk.Tracking.Editor
             {
                 Debug.LogError("Failed to bind ikTargetsSink/AvatarVRIKTargetsDriver");
             }
+            else
+            {
+                _ikTargetsSink.MirrorHandsForSelfie = true;
+            }
 
             if (!_avatar.Components.TryGet(out _calibrationController))
             {
