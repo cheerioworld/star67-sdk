@@ -57,6 +57,7 @@ namespace Star67.Sdk.Tracking.Editor
             else
             {
                 _ikTargetsSink.MirrorHandsForSelfie = true;
+                _ikTargetsSink.MirrorWristPositionsForSelfie = true;
             }
 
             if (!_avatar.Components.TryGet(out _calibrationController))

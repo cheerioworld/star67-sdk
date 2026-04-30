@@ -18,6 +18,11 @@ namespace Star67.Sdk.Avatar
         public float PositionWeight;
         public float RotationWeight;
         public string SourceHandSlot = string.Empty;
+        public bool MirrorHandsForSelfie;
+        public bool MirrorWristPositionForSelfie;
+        public Vector3 SourceWristPosition;
+        public Vector3 TargetLocalPosition;
+        public Quaternion TargetLocalRotation = Quaternion.identity;
         public string Summary = string.Empty;
 
         public void ClearRuntimeState()
@@ -28,6 +33,11 @@ namespace Star67.Sdk.Avatar
             PositionWeight = 0f;
             RotationWeight = 0f;
             SourceHandSlot = string.Empty;
+            MirrorHandsForSelfie = false;
+            MirrorWristPositionForSelfie = false;
+            SourceWristPosition = Vector3.zero;
+            TargetLocalPosition = Vector3.zero;
+            TargetLocalRotation = Quaternion.identity;
             Summary = string.Empty;
         }
     }
@@ -39,6 +49,10 @@ namespace Star67.Sdk.Avatar
         public AvatarIKTargets Targets { get; private set; }
         public VRIK VRIK { get; private set; }
         public bool MirrorHandsForSelfie { get; set; }
+        // Use with MirrorHandsForSelfie when the source pose is in camera space and the avatar
+        // should behave like a mirror. The slot swap maps physical right to avatar left; this
+        // reflects the wrist offset so that cross-body motion also moves in the mirrored direction.
+        public bool MirrorWristPositionsForSelfie { get; set; }
         public AvatarVRIKHandTargetDiagnostics LeftHandDiagnostics { get; } = new AvatarVRIKHandTargetDiagnostics();
         public AvatarVRIKHandTargetDiagnostics RightHandDiagnostics { get; } = new AvatarVRIKHandTargetDiagnostics();
 
@@ -119,8 +133,8 @@ namespace Star67.Sdk.Avatar
             string leftTargetSourceSlot = MirrorHandsForSelfie ? "RightHand" : "LeftHand";
             string rightTargetSourceSlot = MirrorHandsForSelfie ? "LeftHand" : "RightHand";
 
-            ApplyHand(calibratedCameraPose, leftTargetSourceHand, leftTargetSourceSlot, Targets.LeftWristTarget, VRIK.solver.leftArm, LeftHandDiagnostics, true, MirrorHandsForSelfie);
-            ApplyHand(calibratedCameraPose, rightTargetSourceHand, rightTargetSourceSlot, Targets.RightWristTarget, VRIK.solver.rightArm, RightHandDiagnostics, false, MirrorHandsForSelfie);
+            ApplyHand(calibratedCameraPose, leftTargetSourceHand, leftTargetSourceSlot, Targets.LeftWristTarget, VRIK.solver.leftArm, LeftHandDiagnostics, true, MirrorHandsForSelfie, MirrorWristPositionsForSelfie);
+            ApplyHand(calibratedCameraPose, rightTargetSourceHand, rightTargetSourceSlot, Targets.RightWristTarget, VRIK.solver.rightArm, RightHandDiagnostics, false, MirrorHandsForSelfie, MirrorWristPositionsForSelfie);
         }
 
         protected override void OnRemoved()
@@ -167,8 +181,18 @@ namespace Star67.Sdk.Avatar
 
         private static Pose Combine(Pose parent, TrackingPose child, bool mirrorSourceOrientation)
         {
+            return Combine(parent, child, false, mirrorSourceOrientation);
+        }
+
+        private static Pose Combine(Pose parent, TrackingPose child, bool mirrorSourcePosition, bool mirrorSourceOrientation)
+        {
             Vector3 childPosition = ToVector3(child.GetPositionValue());
             Quaternion childRotation = ToQuaternion(child.GetRotationValue());
+            if (mirrorSourcePosition)
+            {
+                childPosition = ReflectAcrossSelfieMirrorPlane(childPosition);
+            }
+
             if (mirrorSourceOrientation)
             {
                 childRotation = MirrorSourceRotationForSelfie(childRotation);
@@ -210,7 +234,8 @@ namespace Star67.Sdk.Avatar
             IKSolverVR.Arm arm,
             AvatarVRIKHandTargetDiagnostics diagnostics,
             bool isLeft,
-            bool mirrorSourceOrientation)
+            bool mirrorSourceOrientation,
+            bool mirrorSourcePosition)
         {
             if (diagnostics == null)
             {
@@ -223,6 +248,8 @@ namespace Star67.Sdk.Avatar
             diagnostics.IsApplied = false;
             diagnostics.Confidence = trackedHand != null ? Mathf.Clamp01(trackedHand.Confidence) : 0f;
             diagnostics.SourceHandSlot = sourceHandSlot ?? string.Empty;
+            diagnostics.MirrorHandsForSelfie = mirrorSourceOrientation;
+            diagnostics.MirrorWristPositionForSelfie = mirrorSourcePosition;
 
             if (arm == null)
             {
@@ -242,12 +269,15 @@ namespace Star67.Sdk.Avatar
                 return;
             }
 
-            Pose wristTargetPose = Combine(calibratedCameraPose, trackedHand.WristPoseSourceSpace, mirrorSourceOrientation);
+            Pose wristTargetPose = Combine(calibratedCameraPose, trackedHand.WristPoseSourceSpace, mirrorSourcePosition, mirrorSourceOrientation);
+            diagnostics.SourceWristPosition = ToVector3(trackedHand.WristPoseSourceSpace.GetPositionValue());
             wristTarget.localPosition = wristTargetPose.position;
             wristTarget.localRotation = MatchWristRotationToVrik(wristTargetPose.rotation, arm, isLeft);
+            diagnostics.TargetLocalPosition = wristTarget.localPosition;
+            diagnostics.TargetLocalRotation = wristTarget.localRotation;
             SetArmWeights(arm, 1f, 1f, diagnostics);
             diagnostics.IsApplied = true;
-            diagnostics.Summary = $"{diagnostics.SourceHandSlot} tracked conf {diagnostics.Confidence:0.00}";
+            diagnostics.Summary = $"{diagnostics.SourceHandSlot} tracked conf {diagnostics.Confidence:0.00} src {diagnostics.SourceWristPosition} target {diagnostics.TargetLocalPosition}";
         }
 
         private static Quaternion MatchWristRotationToVrik(Quaternion wristRotation, IKSolverVR.Arm arm, bool isLeft)
