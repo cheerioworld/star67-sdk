@@ -283,12 +283,7 @@ namespace Star67.Sdk.Avatar
         private static Quaternion MatchWristRotationToVrik(Quaternion wristRotation, IKSolverVR.Arm arm, bool isLeft)
         {
             Vector3 sourceForward = wristRotation * Vector3.forward;
-            Vector3 sourceHandNormal = wristRotation * Vector3.up;
-            // Match the anatomical thumb axis directly. In selfie mirroring, matching only
-            // finger direction plus hand normal can preserve the silhouette while swapping palm/back.
-            Vector3 sourceThumbSide = isLeft
-                ? Vector3.Cross(sourceForward, sourceHandNormal)
-                : Vector3.Cross(sourceHandNormal, sourceForward);
+            Vector3 sourceUp = wristRotation * Vector3.up;
             Vector3 destinationForward = arm.wristToPalmAxis;
             Vector3 destinationThumbSide = arm.palmToThumbAxis;
 
@@ -297,9 +292,9 @@ namespace Star67.Sdk.Avatar
                 destinationForward = Vector3.forward;
             }
 
-            if (sourceThumbSide.sqrMagnitude <= 1e-8f)
+            if (sourceUp.sqrMagnitude <= 1e-8f)
             {
-                sourceThumbSide = isLeft ? Vector3.left : Vector3.right;
+                sourceUp = Vector3.up;
             }
 
             if (destinationThumbSide.sqrMagnitude <= 1e-8f)
@@ -307,16 +302,28 @@ namespace Star67.Sdk.Avatar
                 destinationThumbSide = isLeft ? Vector3.left : Vector3.right;
             }
 
-            Vector3.OrthoNormalize(ref sourceForward, ref sourceThumbSide);
-            Vector3.OrthoNormalize(ref destinationForward, ref destinationThumbSide);
+            Vector3 destinationHandUp = isLeft
+                ? Vector3.Cross(destinationForward, destinationThumbSide)
+                : -Vector3.Cross(destinationForward, destinationThumbSide);
+            if (destinationHandUp.sqrMagnitude <= 1e-8f)
+            {
+                destinationHandUp = Vector3.up;
+            }
 
-            Quaternion sourceBasisRotation = Quaternion.LookRotation(sourceForward, sourceThumbSide);
+            // FinalIK's derived hand-up axis follows the hand bone's up/back-of-hand convention.
+            // The semantic wrist rotation uses Vector3.up as the palm-facing normal, so invert
+            // the destination axis here to keep palm-facing-camera from becoming back-facing-camera.
+            Vector3 destinationPalmNormal = -destinationHandUp;
+            Vector3.OrthoNormalize(ref sourceForward, ref sourceUp);
+            Vector3.OrthoNormalize(ref destinationForward, ref destinationPalmNormal);
+
+            Quaternion sourceBasisRotation = Quaternion.LookRotation(sourceForward, sourceUp);
             return QuaTools.MatchRotation(
                 sourceBasisRotation,
                 Vector3.forward,
                 Vector3.up,
                 destinationForward,
-                destinationThumbSide);
+                destinationPalmNormal);
         }
 
         private static void SetArmWeights(
