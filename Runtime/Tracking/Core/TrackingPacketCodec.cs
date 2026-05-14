@@ -126,10 +126,21 @@ namespace Star67.Tracking
             }
 
             int offset = 0;
+            TrackingFeatureFlags effectiveFeatures = frame.Features;
+            if (!HasTrackedHand(effectiveFeatures, TrackingFeatureFlags.LeftHand, frame.LeftHand))
+            {
+                effectiveFeatures &= ~TrackingFeatureFlags.LeftHand;
+            }
+
+            if (!HasTrackedHand(effectiveFeatures, TrackingFeatureFlags.RightHand, frame.RightHand))
+            {
+                effectiveFeatures &= ~TrackingFeatureFlags.RightHand;
+            }
+
             if (!TryWriteHeader(TrackingPacketType.Frame, frame.SessionToken, destination, ref offset)
                 || !TryWriteUInt64(frame.Sequence, destination, ref offset)
                 || !TryWriteInt64(frame.CaptureTimestampUs, destination, ref offset)
-                || !TryWriteUInt32((uint)frame.Features, destination, ref offset)
+                || !TryWriteUInt32((uint)effectiveFeatures, destination, ref offset)
                 || !TryWritePose(frame.CameraWorldPose, destination, ref offset)
                 || !TryWritePose(frame.HeadPoseCameraSpace, destination, ref offset))
             {
@@ -144,7 +155,7 @@ namespace Star67.Tracking
                 }
             }
 
-            if (HasTrackedHand(frame.Features, TrackingFeatureFlags.LeftHand, frame.LeftHand))
+            if (HasTrackedHand(effectiveFeatures, TrackingFeatureFlags.LeftHand, frame.LeftHand))
             {
                 if (!TryWriteHand(frame.LeftHand, destination, ref offset))
                 {
@@ -152,7 +163,7 @@ namespace Star67.Tracking
                 }
             }
 
-            if (HasTrackedHand(frame.Features, TrackingFeatureFlags.RightHand, frame.RightHand))
+            if (HasTrackedHand(effectiveFeatures, TrackingFeatureFlags.RightHand, frame.RightHand))
             {
                 if (!TryWriteHand(frame.RightHand, destination, ref offset))
                 {
@@ -295,20 +306,15 @@ namespace Star67.Tracking
 
         private static bool TryWriteHand(TrackedHandData hand, Span<byte> destination, ref int offset)
         {
-            if (!TryWriteSingle(hand.Confidence, destination, ref offset))
+            if (!TryWriteSingle(hand.Confidence, destination, ref offset)
+                || !TryWritePose(hand.WristPoseSourceSpace, destination, ref offset)
+                || !TryWriteThumb(hand.Thumb, destination, ref offset)
+                || !TryWriteFinger(hand.Index, destination, ref offset)
+                || !TryWriteFinger(hand.Middle, destination, ref offset)
+                || !TryWriteFinger(hand.Ring, destination, ref offset)
+                || !TryWriteFinger(hand.Little, destination, ref offset))
             {
                 return false;
-            }
-
-            for (int i = 0; i < TrackingProtocol.HandJointCount; i++)
-            {
-                float3 joint = hand.JointPositions[i];
-                if (!TryWriteSingle(joint.x, destination, ref offset)
-                    || !TryWriteSingle(joint.y, destination, ref offset)
-                    || !TryWriteSingle(joint.z, destination, ref offset))
-                {
-                    return false;
-                }
             }
 
             return true;
@@ -317,25 +323,111 @@ namespace Star67.Tracking
         private static bool TryReadHand(ReadOnlySpan<byte> source, ref int offset, TrackedHandData hand)
         {
             hand.Clear();
-            if (!TryReadSingle(source, ref offset, out float confidence))
+            if (!TryReadSingle(source, ref offset, out float confidence)
+                || !TryReadPose(source, ref offset, out TrackingPose wristPose)
+                || !TryReadThumb(source, ref offset, out SemanticThumbPose thumb)
+                || !TryReadFinger(source, ref offset, out SemanticFingerPose index)
+                || !TryReadFinger(source, ref offset, out SemanticFingerPose middle)
+                || !TryReadFinger(source, ref offset, out SemanticFingerPose ring)
+                || !TryReadFinger(source, ref offset, out SemanticFingerPose little))
             {
                 return false;
             }
 
             hand.IsTracked = true;
-            hand.Confidence = confidence;
-            for (int i = 0; i < TrackingProtocol.HandJointCount; i++)
-            {
-                if (!TryReadSingle(source, ref offset, out float x)
-                    || !TryReadSingle(source, ref offset, out float y)
-                    || !TryReadSingle(source, ref offset, out float z))
-                {
-                    return false;
-                }
+            hand.Confidence = math.clamp(confidence, 0f, 1f);
+            hand.WristPoseSourceSpace = wristPose;
+            thumb.Clamp();
+            index.Clamp();
+            middle.Clamp();
+            ring.Clamp();
+            little.Clamp();
+            hand.Thumb = thumb;
+            hand.Index = index;
+            hand.Middle = middle;
+            hand.Ring = ring;
+            hand.Little = little;
 
-                hand.JointPositions[i] = new float3(x, y, z);
+            return true;
+        }
+
+        private static bool TryWriteFinger(SemanticFingerPose pose, Span<byte> destination, ref int offset)
+        {
+            return TryWriteSingle(pose.McpCurl, destination, ref offset)
+                && TryWriteSingle(pose.PipCurl, destination, ref offset)
+                && TryWriteSingle(pose.DipCurl, destination, ref offset)
+                && TryWriteSingle(pose.McpSplay, destination, ref offset);
+        }
+
+        private static bool TryReadFinger(ReadOnlySpan<byte> source, ref int offset, out SemanticFingerPose pose)
+        {
+            pose = default;
+            if (!TryReadSingle(source, ref offset, out float mcpCurl)
+                || !TryReadSingle(source, ref offset, out float pipCurl)
+                || !TryReadSingle(source, ref offset, out float dipCurl)
+                || !TryReadSingle(source, ref offset, out float mcpSplay))
+            {
+                return false;
             }
 
+            pose = new SemanticFingerPose
+            {
+                McpCurl = mcpCurl,
+                PipCurl = pipCurl,
+                DipCurl = dipCurl,
+                McpSplay = mcpSplay
+            };
+            return true;
+        }
+
+        private static bool TryWriteThumb(SemanticThumbPose pose, Span<byte> destination, ref int offset)
+        {
+            return TryWriteSingle(pose.AimPalmSpace.x, destination, ref offset)
+                && TryWriteSingle(pose.AimPalmSpace.y, destination, ref offset)
+                && TryWriteSingle(pose.AimPalmSpace.z, destination, ref offset)
+                && TryWriteSingle(pose.ProximalPalmSpace.x, destination, ref offset)
+                && TryWriteSingle(pose.ProximalPalmSpace.y, destination, ref offset)
+                && TryWriteSingle(pose.ProximalPalmSpace.z, destination, ref offset)
+                && TryWriteSingle(pose.IntermediatePalmSpace.x, destination, ref offset)
+                && TryWriteSingle(pose.IntermediatePalmSpace.y, destination, ref offset)
+                && TryWriteSingle(pose.IntermediatePalmSpace.z, destination, ref offset)
+                && TryWriteSingle(pose.DistalPalmSpace.x, destination, ref offset)
+                && TryWriteSingle(pose.DistalPalmSpace.y, destination, ref offset)
+                && TryWriteSingle(pose.DistalPalmSpace.z, destination, ref offset)
+                && TryWriteSingle(pose.BaseCurl, destination, ref offset)
+                && TryWriteSingle(pose.TipCurl, destination, ref offset);
+        }
+
+        private static bool TryReadThumb(ReadOnlySpan<byte> source, ref int offset, out SemanticThumbPose pose)
+        {
+            pose = default;
+            if (!TryReadSingle(source, ref offset, out float aimX)
+                || !TryReadSingle(source, ref offset, out float aimY)
+                || !TryReadSingle(source, ref offset, out float aimZ)
+                || !TryReadSingle(source, ref offset, out float proximalX)
+                || !TryReadSingle(source, ref offset, out float proximalY)
+                || !TryReadSingle(source, ref offset, out float proximalZ)
+                || !TryReadSingle(source, ref offset, out float intermediateX)
+                || !TryReadSingle(source, ref offset, out float intermediateY)
+                || !TryReadSingle(source, ref offset, out float intermediateZ)
+                || !TryReadSingle(source, ref offset, out float distalX)
+                || !TryReadSingle(source, ref offset, out float distalY)
+                || !TryReadSingle(source, ref offset, out float distalZ)
+                || !TryReadSingle(source, ref offset, out float baseCurl)
+                || !TryReadSingle(source, ref offset, out float tipCurl))
+            {
+                return false;
+            }
+
+            pose = new SemanticThumbPose
+            {
+                AimPalmSpace = new float3(aimX, aimY, aimZ),
+                ProximalPalmSpace = new float3(proximalX, proximalY, proximalZ),
+                IntermediatePalmSpace = new float3(intermediateX, intermediateY, intermediateZ),
+                DistalPalmSpace = new float3(distalX, distalY, distalZ),
+                BaseCurl = baseCurl,
+                TipCurl = tipCurl
+            };
             return true;
         }
 
