@@ -9,13 +9,13 @@ using UnityEngine.Scripting;
 
 namespace Star67.Avatar
 {
-  public class BasisAvatarLoader : PostprocessedAvatarLoaderBase
+  public class BasisAvatarLoader : PostprocessedAvatarLoaderBase, IObservableAvatarLoader
   {
     [Preserve]
     public BasisAvatarLoader(IEnumerable<IAvatarLoaderPostprocessor> postLoadProcessors = null)
       : base(postLoadProcessors)
     {
-      foreach (var avatarLoaderPostprocessor in postLoadProcessors)
+      foreach (var avatarLoaderPostprocessor in postLoadProcessors ?? Array.Empty<IAvatarLoaderPostprocessor>())
       {
         Debug.Log(avatarLoaderPostprocessor.GetType().Name);
       }
@@ -23,7 +23,11 @@ namespace Star67.Avatar
 
     public override bool CanLoad(IAvatarDescriptor descriptor) => descriptor.Type == AvatarType.Basis;
 
-    public override async Task<IAvatar> LoadAvatarAsync(IAvatarDescriptor descriptor, Transform parent, CancellationToken cancellationToken)
+    public override Task<IAvatar> LoadAvatarAsync(IAvatarDescriptor descriptor, Transform parent, CancellationToken cancellationToken)
+      => LoadAvatarAsync(descriptor, parent, cancellationToken, null);
+
+    public async Task<IAvatar> LoadAvatarAsync(IAvatarDescriptor descriptor, Transform parent, CancellationToken cancellationToken,
+      IProgress<AvatarLoadProgress> observer)
     {
       if (descriptor == null)
       {
@@ -34,12 +38,10 @@ namespace Star67.Avatar
 
       string beeSource = ResolveBeeSource(descriptor);
       string password = ResolveUnlockPassword(descriptor);
-      Debug.Log($"Loading basis avatar from {beeSource}...");
-      Debug.Log("Password: " + password);
 
       if (string.IsNullOrWhiteSpace(password))
       {
-        throw new InvalidOperationException(
+        throw new AvatarLoadException(AvatarLoadFailureCategory.Configuration,
           "Basis avatar loading requires an unlock password. " +
           "Set descriptor.Metadata[\"unlockPassword\"] (or \"password\"/\"vp\").");
       }
@@ -51,15 +53,17 @@ namespace Star67.Avatar
 
       if (IsHttpUrl(beeSource))
       {
+        AvatarLoadProgress.Report(observer, AvatarLoadStage.Download, true);
         (connector, platformBundle, bundleSectionBytes) = await LoadFromRemoteBeeAsync(
           beeSource,
           password,
           progress,
-          cancellationToken);
+          cancellationToken, observer);
       }
       else
       {
         string localBeePath = ResolveLocalBeePath(beeSource);
+        AvatarLoadProgress.Report(observer, AvatarLoadStage.AssetsReady);
         (connector, platformBundle, bundleSectionBytes) = await LoadFromLocalBeeAsync(
           localBeePath,
           password,
@@ -77,7 +81,7 @@ namespace Star67.Avatar
 
       if (bundleRequest?.assetBundle == null)
       {
-        throw new InvalidOperationException("Basis bundle decryption/load failed (asset bundle is null).");
+        throw new AvatarLoadException(AvatarLoadFailureCategory.InvalidData, "Basis bundle decryption/load failed (asset bundle is null).");
       }
 
       AssetBundle assetBundle = bundleRequest.assetBundle;
@@ -85,6 +89,7 @@ namespace Star67.Avatar
 
       try
       {
+        cancellationToken.ThrowIfCancellationRequested();
         GameObject avatarPrefab = await LoadAvatarPrefabAsync(assetBundle, platformBundle.AssetToLoadName, cancellationToken);
         if (avatarPrefab == null)
         {
@@ -112,6 +117,7 @@ namespace Star67.Avatar
         avatar.Components.Add<AvatarFaceBlendshapeDriver>();
 
         await Task.Yield();
+        AvatarLoadProgress.Report(observer, AvatarLoadStage.Apply);
         return await PostprocessLoadedAvatarAsync(avatar, cancellationToken);
       }
       catch
@@ -392,7 +398,8 @@ namespace Star67.Avatar
     }
 
     private static async Task<(BasisBundleConnector Connector, BasisBundleGenerated Generated, byte[] SectionBytes)>
-      LoadFromRemoteBeeAsync(string url, string password, BasisProgressReport progress, CancellationToken cancellationToken)
+      LoadFromRemoteBeeAsync(string url, string password, BasisProgressReport progress, CancellationToken cancellationToken,
+        IProgress<AvatarLoadProgress> observer)
     {
       BeeResult<BasisIOManagement.BeeDownloadResult> result = await BasisIOManagement.DownloadBEEEx(
         url,
@@ -400,10 +407,11 @@ namespace Star67.Avatar
         progress,
         cancellationToken);
 
+      cancellationToken.ThrowIfCancellationRequested();
+
       if (!result.IsSuccess || result.Value == null)
       {
-        throw new InvalidOperationException(
-          $"Failed to download Basis .bee from '{url}'. {result.Error ?? "Unknown error."}");
+        throw new AvatarLoadException(ClassifyDownloadFailure(result.ResponseCode, result.FailureKind), "Avatar asset acquisition failed.");
       }
 
       BasisBundleConnector connector = result.Value.Connector;
@@ -424,8 +432,26 @@ namespace Star67.Avatar
         throw new InvalidOperationException("Downloaded Basis .bee did not return platform bundle bytes.");
       }
 
+      AvatarLoadProgress.Report(observer, AvatarLoadStage.AssetsReady, true, result.Value.DownloadedBytes);
+
       return (connector, generated, section);
     }
+
+    private static AvatarLoadFailureCategory ClassifyDownloadFailure(long code, BeeFailureKind kind) => kind switch
+    {
+      BeeFailureKind.Network => AvatarLoadFailureCategory.Network,
+      BeeFailureKind.InvalidData => AvatarLoadFailureCategory.InvalidData,
+      BeeFailureKind.Unsupported => AvatarLoadFailureCategory.Unsupported,
+      _ => code switch
+      {
+        401 or 403 => AvatarLoadFailureCategory.Rejected,
+        404 => AvatarLoadFailureCategory.NotFound,
+        408 or 504 => AvatarLoadFailureCategory.Timeout,
+        0 => AvatarLoadFailureCategory.Network,
+        200 or 206 or 416 => AvatarLoadFailureCategory.InvalidData,
+        _ => AvatarLoadFailureCategory.Unknown,
+      },
+    };
 
     private static async Task<(BasisBundleConnector Connector, BasisBundleGenerated Generated, byte[] SectionBytes)>
       LoadFromLocalBeeAsync(string localBeePath, string password, BasisProgressReport progress, CancellationToken cancellationToken)

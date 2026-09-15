@@ -12,12 +12,14 @@ public static class BasisIOManagement
         public BasisBundleConnector Connector { get; }
         public string LocalPath { get; }
         public byte[] SectionData { get; }
+        public long DownloadedBytes { get; }
 
-        public BeeDownloadResult(BasisBundleConnector connector, string localPath, byte[] sectionData)
+        public BeeDownloadResult(BasisBundleConnector connector, string localPath, byte[] sectionData, long downloadedBytes = 0)
         {
             Connector = connector ?? throw new ArgumentNullException(nameof(connector));
             LocalPath = localPath ?? throw new ArgumentNullException(nameof(localPath));
             SectionData = sectionData ?? throw new ArgumentNullException(nameof(sectionData));
+            DownloadedBytes = downloadedBytes;
         }
     }
 
@@ -57,7 +59,7 @@ public static class BasisIOManagement
         var headerRes = await DownloadRangeInternal(url, startByte: 0, endByteInclusive: BasisBeeConstants.RemoteHeaderSize - 1, toFilePath: null, progressCallback, cancellationToken, MaxDownloadSizeInMB);
 
         if (!headerRes.IsSuccess || headerRes.Value?.Data == null)
-            return BeeResult<BeeDownloadResult>.Fail($"DownloadBEEEx: Failed to read remote header. {headerRes.Error ?? "No data"}", headerRes.ResponseCode);
+            return BeeResult<BeeDownloadResult>.Fail($"DownloadBEEEx: Failed to read remote header. {headerRes.Error ?? "No data"}", headerRes.ResponseCode, headerRes.FailureKind);
 
         if (headerRes.Value.Data.Length != BasisBeeConstants.RemoteHeaderSize)
             return BeeResult<BeeDownloadResult>.Fail($"DownloadBEEEx: Remote header size mismatch. Expected {BasisBeeConstants.RemoteHeaderSize} bytes, got {headerRes.Value.Data.Length}.", headerRes.ResponseCode);
@@ -76,7 +78,7 @@ public static class BasisIOManagement
         var connectorRes = await DownloadRangeInternal(url, connectorStart, connectorEndInclusive, toFilePath: null, progressCallback, cancellationToken, MaxDownloadSizeInMB);
 
         if (!connectorRes.IsSuccess || connectorRes.Value.Data == null)
-            return BeeResult<BeeDownloadResult>.Fail($"DownloadBEEEx: Failed to download connector block. {connectorRes.Error ?? "No data"}", connectorRes.ResponseCode);
+            return BeeResult<BeeDownloadResult>.Fail($"DownloadBEEEx: Failed to download connector block. {connectorRes.Error ?? "No data"}", connectorRes.ResponseCode, connectorRes.FailureKind);
 
         if (connectorRes.Value.Data.LongLength != connectorLength)
             return BeeResult<BeeDownloadResult>.Fail($"DownloadBEEEx: Expected {connectorLength} connector bytes, got {connectorRes.Value.Data.LongLength}.", connectorRes.ResponseCode);
@@ -89,7 +91,7 @@ public static class BasisIOManagement
         BasisDebug.Log("GenerateMetaFromBytes", BasisDebug.LogTag.Event);
 
         if (connector == null)
-            return BeeResult<BeeDownloadResult>.Fail("DownloadBEEEx: Failed to parse connector metadata (null).");
+            return BeeResult<BeeDownloadResult>.Fail("DownloadBEEEx: Failed to parse connector metadata (null).", kind: BeeFailureKind.InvalidData);
 
         if (connector.BasisBundleGenerated == null || connector.BasisBundleGenerated.Length == 0)
             return BeeResult<BeeDownloadResult>.Fail("DownloadBEEEx: Connector contains no sections.");
@@ -97,6 +99,7 @@ public static class BasisIOManagement
         // 4) Walk sections, compute ranges, download only the platform-matching section
         long previousEnd = connectorEndInclusive; // End of connector region in the remote file
         byte[] platformSectionData = null;
+        long downloadedBytes = headerRes.Value.Data.LongLength + connectorBytes.LongLength;
 
         for (int index = 0; index < connector.BasisBundleGenerated.Length; index++)
         {
@@ -137,12 +140,13 @@ public static class BasisIOManagement
                 var sectRes = await DownloadRangeInternal(url, start, end, toFilePath: null, progressCallback, cancellationToken, MaxDownloadSizeInMB);
 
                 if (!sectRes.IsSuccess || sectRes.Value?.Data == null)
-                    return BeeResult<BeeDownloadResult>.Fail($"DownloadBEEEx: Failed to download platform section at index {index}. {sectRes.Error ?? "No data"}", sectRes.ResponseCode);
+                    return BeeResult<BeeDownloadResult>.Fail($"DownloadBEEEx: Failed to download platform section at index {index}. {sectRes.Error ?? "No data"}", sectRes.ResponseCode, sectRes.FailureKind);
 
                 if (sectRes.Value.Data.LongLength != sectionLength)
                     return BeeResult<BeeDownloadResult>.Fail($"DownloadBEEEx: Expected section length {sectionLength}, got {sectRes.Value.Data.LongLength}.", sectRes.ResponseCode);
 
                 platformSectionData = sectRes.Value.Data;
+                downloadedBytes += platformSectionData.LongLength;
                 BasisDebug.Log("Platform section length: " + platformSectionData.LongLength);
                 // Do not break; keep walking to ensure previousEnd is advanced correctly regardless of multiple matches
             }
@@ -151,7 +155,7 @@ public static class BasisIOManagement
         }
 
         if (platformSectionData == null || platformSectionData.Length == 0)
-            return BeeResult<BeeDownloadResult>.Fail("DownloadBEEEx: No platform-matching section found in connector.");
+            return BeeResult<BeeDownloadResult>.Fail("DownloadBEEEx: No platform-matching section found in connector.", kind: BeeFailureKind.Unsupported);
 
         // 5) Write local .bee (Int32 header + connector + section)
         string fileName = $"{connector.UniqueVersion}{BasisBeeConstants.BasisEncryptedExtension}";
@@ -172,7 +176,7 @@ public static class BasisIOManagement
         if (!writeRes.IsSuccess)
             return BeeResult<BeeDownloadResult>.Fail($"DownloadBEEEx: {writeRes.Error}");
 
-        return BeeResult<BeeDownloadResult>.Ok(new BeeDownloadResult(connector, localPath, platformSectionData));
+        return BeeResult<BeeDownloadResult>.Ok(new BeeDownloadResult(connector, localPath, platformSectionData, downloadedBytes));
     }
     /// <summary>
     /// Downloads only the connector bytes from the remote BEE (8-byte Int64 header) and parses them.
@@ -474,7 +478,8 @@ public static class BasisIOManagement
         {
             progress?.ReportProgress(requestId, 100, "Downloading Complete");
             var errDetail = BuildNetworkErrorDetail(req);
-            return BeeResult<DownloadPayload>.Fail($"Network error: {req.error}. {errDetail}", code);
+            return BeeResult<DownloadPayload>.Fail($"Network error: {req.error}. {errDetail}", code,
+                req.result == UnityWebRequest.Result.ConnectionError ? BeeFailureKind.Network : BeeFailureKind.Unknown);
         }
 
         // Enforce partial content semantics and provide actionable reasons

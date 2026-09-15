@@ -26,7 +26,11 @@ namespace Star67.Avatar
       _loaders = loaders ?? throw new ArgumentNullException(nameof(loaders));
     }
 
-    public async Task<IAvatar> LoadAvatar(IAvatarDescriptor descriptor, CancellationToken cancellationToken = default)
+    public Task<IAvatar> LoadAvatar(IAvatarDescriptor descriptor, CancellationToken cancellationToken = default)
+      => LoadAvatar(descriptor, cancellationToken, null);
+
+    public async Task<IAvatar> LoadAvatar(IAvatarDescriptor descriptor, CancellationToken cancellationToken,
+      IProgress<AvatarLoadProgress> observer)
     {
       if (descriptor == null)
       {
@@ -42,14 +46,30 @@ namespace Star67.Avatar
 
         try
         {
-          loadedAvatar = await loader.LoadAvatarAsync(descriptor, _avatarParent, cancellationToken);
+          loadedAvatar = loader is IObservableAvatarLoader observable
+            ? await observable.LoadAvatarAsync(descriptor, _avatarParent, cancellationToken, observer)
+            : await loader.LoadAvatarAsync(descriptor, _avatarParent, cancellationToken);
           if (loadedAvatar == null)
           {
             throw new InvalidOperationException($"Loader '{loader.GetType().Name}' returned null avatar.");
           }
 
+          cancellationToken.ThrowIfCancellationRequested();
+          AvatarLoadProgress.Report(observer, AvatarLoadStage.Apply);
+
           IAvatar previousAvatar = _activeAvatar;
           _activeAvatar = loadedAvatar;
+          try
+          {
+            AvatarLoaded?.Invoke(loadedAvatar);
+            cancellationToken.ThrowIfCancellationRequested();
+          }
+          catch
+          {
+            _activeAvatar = previousAvatar;
+            if (previousAvatar != null) NotifySafely(AvatarLoaded, previousAvatar);
+            throw;
+          }
           activated = true;
 
           if (previousAvatar != null && !ReferenceEquals(previousAvatar, loadedAvatar))
@@ -57,7 +77,7 @@ namespace Star67.Avatar
             DisposeAvatar(previousAvatar);
           }
 
-          AvatarLoaded?.Invoke(loadedAvatar);
+          AvatarLoadProgress.Report(observer, AvatarLoadStage.Activated);
           return loadedAvatar;
         }
         catch
@@ -91,7 +111,7 @@ namespace Star67.Avatar
 
     private void DisposeAvatar(IAvatar avatar)
     {
-      AvatarUnloaded?.Invoke(avatar);
+      NotifySafely(AvatarUnloaded, avatar);
       try
       {
         avatar.Dispose();
@@ -99,6 +119,16 @@ namespace Star67.Avatar
       catch (Exception exception)
       {
         Debug.LogWarning($"AvatarService: Failed to dispose avatar cleanly. {exception.Message}");
+      }
+    }
+
+    private static void NotifySafely(Action<IAvatar> handlers, IAvatar avatar)
+    {
+      if (handlers == null) return;
+      foreach (Action<IAvatar> handler in handlers.GetInvocationList())
+      {
+        try { handler(avatar); }
+        catch (Exception e) { Debug.LogWarning($"Avatar notification failed ({e.GetType().Name})."); }
       }
     }
   }
