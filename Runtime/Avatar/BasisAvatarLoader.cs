@@ -63,12 +63,12 @@ namespace Star67.Avatar
       else
       {
         string localBeePath = ResolveLocalBeePath(beeSource);
-        AvatarLoadProgress.Report(observer, AvatarLoadStage.AssetsReady);
         (connector, platformBundle, bundleSectionBytes) = await LoadFromLocalBeeAsync(
           localBeePath,
           password,
           progress,
           cancellationToken);
+        AvatarLoadProgress.Report(observer, AvatarLoadStage.AssetsReady);
       }
 
       cancellationToken.ThrowIfCancellationRequested();
@@ -405,7 +405,8 @@ namespace Star67.Avatar
         url,
         password,
         progress,
-        cancellationToken);
+        cancellationToken,
+        downloadProgress: (bytes, total) => AvatarLoadProgress.Report(observer, AvatarLoadStage.Download, true, bytes, total));
 
       cancellationToken.ThrowIfCancellationRequested();
 
@@ -437,7 +438,7 @@ namespace Star67.Avatar
       return (connector, generated, section);
     }
 
-    private static AvatarLoadFailureCategory ClassifyDownloadFailure(long code, BeeFailureKind kind) => kind switch
+    internal static AvatarLoadFailureCategory ClassifyDownloadFailure(long code, BeeFailureKind kind) => kind switch
     {
       BeeFailureKind.Network => AvatarLoadFailureCategory.Network,
       BeeFailureKind.InvalidData => AvatarLoadFailureCategory.InvalidData,

@@ -13,12 +13,13 @@ namespace Star67.Avatar
         public AvatarLoadStage Stage { get; }
         public bool IsRemote { get; }
         public long? DownloadedBytes { get; }
-        public AvatarLoadProgress(AvatarLoadStage stage, bool isRemote = false, long? downloadedBytes = null)
-        { Stage = stage; IsRemote = isRemote; DownloadedBytes = downloadedBytes; }
+        public long? TotalBytes { get; }
+        public AvatarLoadProgress(AvatarLoadStage stage, bool isRemote = false, long? downloadedBytes = null, long? totalBytes = null)
+        { Stage = stage; IsRemote = isRemote; DownloadedBytes = downloadedBytes; TotalBytes = totalBytes; }
 
-        public static void Report(IProgress<AvatarLoadProgress> observer, AvatarLoadStage stage, bool isRemote = false, long? downloadedBytes = null)
+        public static void Report(IProgress<AvatarLoadProgress> observer, AvatarLoadStage stage, bool isRemote = false, long? downloadedBytes = null, long? totalBytes = null)
         {
-            try { observer?.Report(new AvatarLoadProgress(stage, isRemote, downloadedBytes)); }
+            try { observer?.Report(new AvatarLoadProgress(stage, isRemote, downloadedBytes, totalBytes)); }
             catch (Exception) { /* Observers cannot fail a load. */ }
         }
     }

@@ -11,6 +11,7 @@ Built-avatar upload, storage, cataloging, and distribution currently use `star67
 ## Code boundaries
 
 - `Runtime/Contracts` defines reusable avatar interfaces. `Runtime/Avatar` handles avatar loading/calibration and related runtime behavior.
+- `BasisAvatarCache` owns atomic local `.BEE` cache writes and validation; consumers supply version/platform-aware keys and operation lifetimes. `AvatarLoadProgress` exposes cumulative bytes and an optional total. The vendored `BasisIOManagement` has local progress, cancellation, and atomic-write changes that must survive an intentional vendor refresh; the `.BEE` format is unchanged.
 - `Runtime/Tracking/Core` owns shared tracking contracts, frames, codec, recording, and transport. `Runtime/Tracking/Unity` connects tracking to Unity and avatar rigs.
 - `Editor` contains creator/editor tooling; keep Editor-only code out of runtime assemblies.
 - `Basis` and `External` contain supporting/vendor code. The separate upstream Basis checkout in SDK development is mostly reference material; do not refresh vendors as routine setup.
